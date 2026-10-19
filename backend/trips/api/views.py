@@ -10,10 +10,11 @@ from trips.api.serializers import (
     GeocodeQuerySerializer,
     PlaceSerializer,
     TripPlanRequestSerializer,
-    TripSerializer,
+    serialize_plan,
 )
-from trips.providers.base import ProviderError
+from trips.providers.base import NoRouteError, ProviderError
 from trips.services.geocoding import search_places
+from trips.services.plan_trip import plan_trip
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +45,25 @@ class GeocodeView(APIView):
 
 
 class TripPlanView(APIView):
-    """Stage 0: validate and normalize the trip. Later stages add routes, weather and risk."""
+    """Validate the trip, then run the pipeline (currently: candidate routes)."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "plan"
 
     def post(self, request: Request) -> Response:
         serializer = TripPlanRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response(
-            {
-                "trip": TripSerializer(serializer.validated_data["trip"]).data,
-                "warnings": serializer.validated_data["warnings"],
-            }
-        )
+        try:
+            plan = plan_trip(serializer.validated_data["trip"])
+        except NoRouteError:
+            return Response(
+                {"detail": "No truck route exists between these places."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        except ProviderError:
+            logger.exception("Route planning failed")
+            return Response(
+                {"detail": "Route planning is temporarily unavailable."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(serialize_plan(plan, serializer.validated_data["warnings"]))

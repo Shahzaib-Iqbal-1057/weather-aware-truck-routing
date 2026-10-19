@@ -3,13 +3,15 @@ from datetime import datetime
 from django.utils import timezone
 from rest_framework import serializers
 
+from trips.domain.geo import simplify
 from trips.domain.trip_request import (
     DEFAULT_SPACING_MI,
     TripRequest,
     TripValidationError,
     build_trip_request,
 )
-from trips.domain.types import Place, PlaceKind
+from trips.domain.types import Place, PlaceKind, Route
+from trips.services.plan_trip import TripPlan
 
 
 class LocalDateTimeField(serializers.Field):
@@ -78,3 +80,37 @@ class TripSerializer(serializers.Serializer):
 
     def get_departure_timezone_abbr(self, trip: TripRequest) -> str:
         return trip.departure_local.strftime("%Z")
+
+
+METERS_PER_MILE = 1609.344
+# Display lines are simplified: a point that deviates less than this from the line is dropped.
+# The full geometry stays on the server for checkpoint placement.
+DISPLAY_TOLERANCE_M = 25.0
+
+
+class RouteSerializer(serializers.Serializer):
+    """A route for the browser, labelled A, B, C in order of travel time."""
+
+    def to_representation(self, route: Route) -> dict:
+        index = self.context["index"][id(route)]
+        return {
+            "id": chr(ord("A") + index),
+            "distance_mi": round(route.length_m / METERS_PER_MILE, 1),
+            "travel_time_s": round(route.travel_time_s),
+            "traffic_delay_s": round(route.traffic_delay_s),
+            # GeoJSON order: [lon, lat]
+            "geometry": [
+                [round(lon, 5), round(lat, 5)]
+                for lat, lon in simplify(route.points, DISPLAY_TOLERANCE_M)
+            ],
+        }
+
+
+def serialize_plan(plan: TripPlan, warnings: list[str]) -> dict:
+    index = {id(route): i for i, route in enumerate(plan.routes)}
+    return {
+        "trip": TripSerializer(plan.trip).data,
+        "routes": RouteSerializer(plan.routes, many=True, context={"index": index}).data,
+        "notes": plan.notes,
+        "warnings": warnings,
+    }

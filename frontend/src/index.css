@@ -11,6 +11,9 @@
   --warning-bg: #fff8e1;
   --error: #c92a2a;
   --radius: 6px;
+  /* Keep in sync with features/map/mapStyle.ts */
+  --route-selected: #2a78d6;
+  --route-alternative: #898781;
 
   font:
     15px/1.5 system-ui,

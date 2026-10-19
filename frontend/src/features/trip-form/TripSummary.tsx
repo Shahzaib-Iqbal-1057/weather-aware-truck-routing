@@ -16,7 +16,7 @@ export function TripSummary({ plan }: { plan: TripPlanResponse }) {
   const { trip, warnings } = plan
   return (
     <section className="trip-summary" aria-label="Trip summary">
-      <h2>Trip ready</h2>
+      <h2>Trip</h2>
       <dl>
         <dt>From</dt>
         <dd>{trip.origin.label}</dd>

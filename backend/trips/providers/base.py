@@ -1,6 +1,9 @@
+from datetime import datetime
 from typing import Protocol
 
-from trips.domain.types import Place
+from trips.domain.geo import BoundingBox
+from trips.domain.types import Place, Route
+from trips.domain.vehicle import VehicleProfile
 
 
 class ProviderError(Exception):
@@ -10,7 +13,26 @@ class ProviderError(Exception):
     """
 
 
+class NoRouteError(ProviderError):
+    """The router found no drivable route (e.g. across an ocean, or every option was avoided)."""
+
+
 class Geocoder(Protocol):
     def search(self, query: str, *, limit: int) -> list[Place]:
         """Return up to `limit` US places matching a partial query, best match first."""
+        ...
+
+
+class RoutingProvider(Protocol):
+    def routes(
+        self,
+        origin: Place,
+        destination: Place,
+        *,
+        depart_at: datetime,
+        vehicle: VehicleProfile,
+        max_alternatives: int,
+        avoid_areas: list[BoundingBox] | None = None,
+    ) -> list[Route]:
+        """Best route plus up to `max_alternatives` alternatives, with traffic for `depart_at`."""
         ...

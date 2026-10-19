@@ -64,7 +64,32 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 |---|---|---|
 | GET | `/api/health/` | Liveness check |
 | GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
-| POST | `/api/trips/plan/` | Validates and normalizes a trip. Later stages add routes, weather and risk. |
+| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes (cached 15 min, rate limited). Later stages add weather and risk. |
+
+## How candidate routes are chosen
+
+Routes come from the TomTom Routing API in truck mode (the "TomTom Maps" API family; the newer
+Orbis family has no truck mode). We do not build a routing engine. We pick which routes to compare:
+
+1. **Request.** Ask TomTom for the best truck route plus 3 alternatives, with the truck's weight,
+   standard semi dimensions and departure time (so typical traffic for that hour is used).
+2. **Filter and pick** (rules from Abraham, Delling, Goldberg & Werneck, *Alternative Routes in
+   Road Networks*, SEA 2010, using the paper's values):
+   - Always keep the fastest route.
+   - Drop any route more than **25% slower** than the fastest (*bounded stretch*).
+   - Then repeatedly add the route that **shares the least road** with those already chosen,
+     skipping any that share **more than 80%** (*limited sharing*). Different roads mean different
+     weather, which is what makes the comparison useful.
+3. **Fill the gap.** If fewer than 3 routes survive, ask TomTom again while avoiding a ~140 km box
+   on the middle of each chosen route (then on their first and second thirds), and repeat step 2
+   on the combined set.
+4. **Report honestly.** If 3 distinct routes still do not exist (short trips, or one sensible road),
+   show the ones that do and say so.
+
+Shared road is measured by sampling each route every 500 m and checking whether the sample lies on
+the other route (~1 km grid). The paper applies the 25% limit to every part of a detour; a routing
+API only returns whole routes, so it is applied to the whole trip. Requesting 3 alternatives rather
+than TomTom's maximum of 5 halves the response time and gave the same choices in testing.
 
 ## Assumptions
 
@@ -78,4 +103,7 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
   8:00 Denver time, wherever the dispatcher is). It is converted to UTC on the server.
 - Departures may be up to 7 days ahead. Beyond 48 hours the app warns that the forecast is less
   reliable.
+- The truck is a standard US tractor-trailer with a 53 ft trailer (13 ft 6 in tall, 8 ft 6 in
+  wide, ~72 ft long, 5 axles), so routes respect low bridges and length limits. Only weight is
+  entered by the user.
 - Wind risk uses sustained wind speed; gusts are shown for information.

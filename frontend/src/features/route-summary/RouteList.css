@@ -1,0 +1,91 @@
+.route-list {
+  margin-top: 24px;
+}
+
+.route-list h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.route-list ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.route-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.route-card:hover {
+  border-color: var(--route-alternative);
+}
+
+.route-card[aria-pressed='true'] {
+  border-color: var(--route-selected);
+  box-shadow: inset 0 0 0 1px var(--route-selected);
+}
+
+.route-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.route-card__badge {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--route-alternative);
+  color: #fff;
+  font-weight: 700;
+}
+
+.route-card[aria-pressed='true'] .route-card__badge {
+  background: var(--route-selected);
+}
+
+.route-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.route-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.route-card__tag,
+.route-card__extra {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.route-card__stats {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.route-list__note {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

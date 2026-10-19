@@ -1,12 +1,41 @@
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
+import pytest
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from tests.factories import make_route, path
+from trips.providers.base import NoRouteError, ProviderError
+from trips.services import plan_trip
+
 DENVER = {"label": "Denver, CO", "lat": 39.7392, "lon": -104.9903, "kind": "city"}
 DALLAS = {"label": "Dallas, TX", "lat": 32.7767, "lon": -96.7970, "kind": "city"}
+
+
+FAST = make_route(path((39.74, -104.99), (32.78, -96.80)), hours=12)
+NORTH = make_route(path((39.74, -104.99), (37.7, -97.3), (32.78, -96.80)), hours=12.5)
+SOUTH = make_route(path((39.74, -104.99), (35.2, -101.8), (32.78, -96.80)), hours=13)
+
+
+class FakeRouter:
+    def __init__(self, result):
+        self.result = result
+
+    def routes(self, *args, **kwargs):
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+@pytest.fixture(autouse=True)
+def fake_router(monkeypatch):
+    def use(result):
+        monkeypatch.setattr(plan_trip, "get_router", lambda: FakeRouter(result))
+
+    use([SOUTH, FAST, NORTH])
+    return use
 
 
 def denver_wall_clock(hours_from_now: float) -> str:
@@ -76,3 +105,35 @@ def test_rejects_malformed_input():
     body = response.json()
     assert "departure_local" in body
     assert "lat" in body["origin"]
+
+
+def test_returns_routes_labelled_by_travel_time():
+    response = post()
+
+    assert response.status_code == 200
+    routes = response.json()["routes"]
+    assert [r["id"] for r in routes] == ["A", "B", "C"]
+    assert [r["travel_time_s"] for r in routes] == [12 * 3600, 12.5 * 3600, 13 * 3600]
+    first = routes[0]
+    assert first["distance_mi"] == pytest.approx(FAST.length_m / 1609.344, abs=0.1)
+    # Display geometry is [lon, lat] and simplified (a straight line needs only its ends).
+    assert first["geometry"] == [[-104.99, 39.74], [-96.8, 32.78]]
+    assert response.json()["notes"] == []
+
+
+def test_no_route_returns_422(fake_router):
+    fake_router(NoRouteError("ocean"))
+
+    response = post()
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "No truck route exists between these places."}
+
+
+def test_routing_failure_returns_502(fake_router):
+    fake_router(ProviderError("down"))
+
+    response = post()
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Route planning is temporarily unavailable."}

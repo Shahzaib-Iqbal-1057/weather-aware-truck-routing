@@ -47,8 +47,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "UNAUTHENTICATED_USER": None,
-    # Protects the shared TomTom daily quota from a single client hammering autocomplete.
-    "DEFAULT_THROTTLE_RATES": {"geocode": "120/min"},
+    # Protects the shared TomTom daily quota from a single client hammering the API.
+    "DEFAULT_THROTTLE_RATES": {"geocode": "120/min", "plan": "20/min"},
 }
 
 LANGUAGE_CODE = "en-us"

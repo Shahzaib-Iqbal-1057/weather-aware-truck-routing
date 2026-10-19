@@ -1,0 +1,110 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from django.utils import timezone
+
+from tests.factories import make_route, path
+from trips.domain.trip_request import TripRequest
+from trips.domain.types import Place
+from trips.providers.base import NoRouteError
+from trips.services.plan_trip import plan_trip
+
+START, END = (35.0, -100.0), (35.0, -96.0)
+DIRECT = make_route(path(START, END), hours=4)
+NORTH = make_route(path(START, (36.0, -98.0), END), hours=4.5)
+SOUTH = make_route(path(START, (34.0, -98.0), END), hours=4.6)
+DIRECT_COPY = make_route([(lat + 0.001, lon) for lat, lon in DIRECT.points], hours=4.05)
+
+
+class FakeRouter:
+    """Returns scripted responses in order and records each call."""
+
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def routes(self, origin, destination, **kwargs):
+        self.calls.append(kwargs)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def make_trip(departure_utc: datetime | None = None) -> TripRequest:
+    return TripRequest(
+        origin=Place(label="Origin", lat=START[0], lon=START[1]),
+        destination=Place(label="Destination", lat=END[0], lon=END[1]),
+        departure_utc=departure_utc or timezone.now() + timedelta(hours=2),
+        departure_timezone="America/Chicago",
+        weight_lb=65_000,
+        spacing_mi=25,
+    )
+
+
+def test_uses_the_first_response_when_it_has_three_distinct_routes():
+    router = FakeRouter([SOUTH, DIRECT, NORTH, DIRECT_COPY])
+
+    plan = plan_trip(make_trip(), router=router)
+
+    assert plan.routes == [DIRECT, NORTH, SOUTH]
+    assert plan.notes == []
+    assert len(router.calls) == 1
+    assert router.calls[0]["max_alternatives"] == 3
+    assert router.calls[0]["avoid_areas"] is None
+
+
+def test_asks_for_detours_when_too_few_distinct_routes():
+    router = FakeRouter([DIRECT, DIRECT_COPY], [NORTH], [SOUTH])
+
+    plan = plan_trip(make_trip(), router=router)
+
+    assert plan.routes == [DIRECT, NORTH, SOUTH]
+    assert len(router.calls) == 3
+    first_detour, second_detour = router.calls[1], router.calls[2]
+    assert first_detour["max_alternatives"] == 0
+    assert len(first_detour["avoid_areas"]) == 1  # middle of the one chosen route
+    assert first_detour["avoid_areas"][0].contains((35.0, -98.0))
+    assert len(second_detour["avoid_areas"]) == 4  # thirds of both chosen routes
+
+
+def test_keeps_going_when_a_detour_is_impossible_and_notes_the_shortfall():
+    router = FakeRouter([DIRECT], NoRouteError("blocked"), [DIRECT_COPY])
+
+    plan = plan_trip(make_trip(), router=router)
+
+    assert plan.routes == [DIRECT]
+    assert plan.notes == ["Only 1 distinct truck route exists for this trip."]
+
+
+def test_no_route_at_all_is_raised():
+    with pytest.raises(NoRouteError):
+        plan_trip(make_trip(), router=FakeRouter(NoRouteError("ocean")))
+
+
+def test_repeated_trips_are_served_from_cache():
+    router = FakeRouter([DIRECT, NORTH, SOUTH])
+    trip = make_trip()
+
+    plan_trip(trip, router=router)
+    plan_trip(trip, router=router)
+
+    assert len(router.calls) == 1
+
+
+def test_departure_in_the_recent_past_is_sent_as_now():
+    router = FakeRouter([DIRECT, NORTH, SOUTH])
+
+    plan_trip(make_trip(departure_utc=timezone.now() - timedelta(minutes=5)), router=router)
+
+    assert router.calls[0]["depart_at"] > datetime.now(UTC)
+
+
+def test_sends_a_standard_semi_with_the_trip_weight():
+    router = FakeRouter([DIRECT, NORTH, SOUTH])
+
+    plan_trip(make_trip(), router=router)
+
+    vehicle = router.calls[0]["vehicle"]
+    assert round(vehicle.weight_kg) == 29_484
+    assert vehicle.height_m == 4.11

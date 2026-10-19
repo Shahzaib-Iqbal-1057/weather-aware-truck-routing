@@ -38,8 +38,22 @@ export interface Trip {
   spacing_mi: number
 }
 
+export type RouteId = 'A' | 'B' | 'C'
+
+export interface RouteResult {
+  id: RouteId
+  distance_mi: number
+  travel_time_s: number
+  traffic_delay_s: number
+  /** Simplified display line, [lon, lat] pairs. */
+  geometry: [number, number][]
+}
+
 export interface TripPlanResponse {
   trip: Trip
+  /** Ordered by travel time; the first is the fastest. */
+  routes: RouteResult[]
+  notes: string[]
   warnings: string[]
 }
 
