@@ -1,0 +1,27 @@
+:root {
+  --text: #1f2933;
+  --text-muted: #616e7c;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e4e7eb;
+  --ok: #2f9e44;
+  --error: #c92a2a;
+
+  font:
+    15px/1.5 system-ui,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
