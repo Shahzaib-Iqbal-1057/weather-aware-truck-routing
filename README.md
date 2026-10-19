@@ -58,9 +58,24 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 | Types | — | `npm run typecheck` |
 | Tests | `.venv/bin/pytest` | `npm test` |
 
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health/` | Liveness check |
+| GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
+| POST | `/api/trips/plan/` | Validates and normalizes a trip. Later stages add routes, weather and risk. |
+
 ## Assumptions
 
 - Region: United States only.
 - Load weight is the truck's total (gross) weight in pounds, limited to standard legal loads
-  (≤ 80,000 lb). Permit (overweight) loads are out of scope.
+  (1,000–80,000 lb). Permit (overweight) loads are out of scope.
+- Origin and destination are picked from autocomplete suggestions, so the app always knows the
+  exact place (e.g. which of the many US "Springfield"s). For businesses, the location is the
+  property's road entrance when TomTom provides one.
+- The departure time is the local time at the origin (e.g. a truck leaving Denver at 8:00 means
+  8:00 Denver time, wherever the dispatcher is). It is converted to UTC on the server.
+- Departures may be up to 7 days ahead. Beyond 48 hours the app warns that the forecast is less
+  reliable.
 - Wind risk uses sustained wind speed; gusts are shown for information.
