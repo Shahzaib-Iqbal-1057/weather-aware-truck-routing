@@ -10,12 +10,7 @@ import {
 import { useNow } from '../../lib/useNow'
 import { PlaceAutocomplete } from './PlaceAutocomplete'
 import './TripForm.css'
-import {
-  MAX_DEPARTURE_AHEAD_DAYS,
-  WEIGHT_MAX_LB,
-  WEIGHT_MIN_LB,
-  WIND_RULE_THRESHOLDS_LB,
-} from './rules'
+import { MAX_DEPARTURE_AHEAD_DAYS, WEIGHT_MAX_LB, WEIGHT_MIN_LB } from './rules'
 import {
   departureWarning,
   validateTripForm,
@@ -95,7 +90,6 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
     : now
   const zoneAbbr = timeZoneAbbreviation(departureInstant, values.departureTimeZone)
   const warning = departureWarning(values, now)
-  const [lighterThreshold, heavierThreshold] = WIND_RULE_THRESHOLDS_LB
 
   return (
     <form className="trip-form" onSubmit={handleSubmit} noValidate>
@@ -158,9 +152,7 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
           onChange={(event) => update({ weightLb: event.target.value })}
         />
         <p className="field__hint">
-          Truck plus cargo, up to {WEIGHT_MAX_LB.toLocaleString('en-US')} lb. Wind limits are
-          stricter above {lighterThreshold.toLocaleString('en-US')} lb and{' '}
-          {heavierThreshold.toLocaleString('en-US')} lb.
+          Truck plus cargo, up to {WEIGHT_MAX_LB.toLocaleString('en-US')} lb.
         </p>
         {fieldError('weightLb') && <p className="field__error">{fieldError('weightLb')}</p>}
       </div>
