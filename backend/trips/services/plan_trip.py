@@ -75,13 +75,13 @@ def plan_trip(
         noun = "route exists" if len(routes) == 1 else "routes exist"
         notes.append(f"Only {len(routes)} distinct truck {noun} for this trip.")
 
-    stops = [(c.position, c.eta) for timeline in timelines for c in timeline.checkpoints]
+    checkpoint_times = [(c.position, c.eta) for timeline in timelines for c in timeline.checkpoints]
     try:
-        forecasts = weather_at(stops, provider=weather)
+        forecasts = weather_at(checkpoint_times, provider=weather)
         weather_available = True
     except ProviderError:
         logger.exception("Weather lookup failed")
-        forecasts = [None] * len(stops)
+        forecasts = [None] * len(checkpoint_times)
         weather_available = False
         notes.append(WEATHER_UNAVAILABLE_NOTE)
 
@@ -99,7 +99,7 @@ def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> list[Route]
     if cached is not None:
         return cached
 
-    vehicle = standard_semi(trip.weight_lb)
+    vehicle = standard_semi(trip.cargo_weight_lb)
     # The router rejects departures in the past; Stage 0 allows a few minutes of grace.
     depart_at = max(trip.departure_utc, timezone.now() + timedelta(minutes=1))
 
@@ -115,6 +115,7 @@ def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> list[Route]
 
     pool = fetch()
     selected = select_routes(pool)
+    fallback_failed = False
     for fractions in FALLBACK_ATTEMPTS:
         if len(selected) >= MAX_ROUTES:
             break
@@ -125,9 +126,16 @@ def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> list[Route]
             pool += fetch(avoid_areas=boxes)
         except NoRouteError:
             continue  # every way round was blocked; try boxes elsewhere
+        except ProviderError:
+            # e.g. rate limit or timeout: keep the good routes we already have.
+            logger.warning("Detour routing failed; returning %d route(s)", len(selected))
+            fallback_failed = True
+            break
         selected = select_routes(pool)
 
-    cache.set(cache_key, selected, ROUTE_CACHE_SECONDS)
+    # A transient failure should not pin a short list of routes in the cache.
+    if not fallback_failed:
+        cache.set(cache_key, selected, ROUTE_CACHE_SECONDS)
     return selected
 
 
@@ -139,6 +147,6 @@ def _route_cache_key(trip: TripRequest) -> str:
         f"{trip.origin.lat:.5f},{trip.origin.lon:.5f}",
         f"{trip.destination.lat:.5f},{trip.destination.lon:.5f}",
         departure_slot.isoformat(),
-        str(trip.weight_lb),
+        str(trip.cargo_weight_lb),
     )
     return "routes:" + hashlib.sha256("|".join(parts).encode()).hexdigest()

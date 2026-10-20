@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from math import asin, cos, radians, sin, sqrt
 
 EARTH_RADIUS_MI = 3958.8
+METERS_PER_MILE = 1609.344
 EARTH_RADIUS_M = 6_371_008.8
 METERS_PER_DEGREE_LAT = 111_320.0
 

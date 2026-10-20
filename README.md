@@ -20,7 +20,7 @@ frontend/               Vite + React + TypeScript
     api/                fetch client, response types, query hooks
     features/           trip-form, map, route-summary, heatmap
     components/         shared UI
-    lib/                shared helpers (risk colors, formatting)
+    lib/                shared helpers (time zones, formatting)
 ```
 
 ## Local development
@@ -96,10 +96,12 @@ than TomTom's maximum of 5 halves the response time and gave the same choices in
 Weather is checked at **checkpoints every 10 miles** along each route, plus the start and the
 destination (a regular checkpoint within 2 miles of the destination is skipped).
 
-- **Why 10 miles:** the brief allows 10, 25 or 50. Forecast models resolve weather at roughly
-  3–13 km, so 10 miles (16 km) is close to the finest detail available, while 25 or 50 miles can
-  step over a single thunderstorm cell. Weather for all checkpoints is fetched in batched
-  requests that stay within the free weather API tier at demo volumes.
+- **Why 10 miles:** the brief lists "every 10 / 25 / 50 miles". We read that as a choice of
+  sampling density and chose 10 miles for every trip, for the most detailed weather picture:
+  forecast models resolve weather at roughly 3–13 km, so 10 miles (16 km) is close to the finest
+  detail available, while 25 or 50 miles can step over a single thunderstorm cell. Weather for all
+  checkpoints is fetched in batched requests, so the finer spacing costs little. (The API still
+  accepts `spacing_mi` of 25 or 50.)
 - **Each checkpoint stands for the road halfway to its neighbours** (mile 20 covers miles 15–25;
   the start and destination cover the half-gaps next to them). The covered miles add up exactly to
   the route length, which is what "Severe miles" and "High miles" are counted from.
@@ -152,8 +154,12 @@ further out).
 ## Assumptions
 
 - Region: United States only.
-- Load weight is the truck's total (gross) weight in pounds, limited to standard legal loads
-  (1,000–80,000 lb). Permit (overweight) loads are out of scope.
+- **"Load weight" is the cargo (freight) weight**, 0–45,000 lb. An empty tractor with a 53 ft
+  trailer already weighs about 35,000 lb, so if the input meant the whole truck, every semi would
+  be over the brief's 30,000 lb threshold and the load rules would no longer distinguish light
+  from heavy loads. The brief's load rules are applied to the cargo. For road and bridge limits the
+  router is sent the truck's gross weight: 35,000 lb + cargo, at most the 80,000 lb federal limit
+  (hence the 45,000 lb cargo maximum). Permit (overweight) loads are out of scope.
 - Origin and destination are picked from autocomplete suggestions, so the app always knows the
   exact place (e.g. which of the many US "Springfield"s). For businesses, the location is the
   property's road entrance when TomTom provides one.
@@ -162,8 +168,10 @@ further out).
 - Departures may be up to 7 days ahead. Beyond 48 hours the app warns that the forecast is less
   reliable.
 - The truck is a standard US tractor-trailer with a 53 ft trailer (13 ft 6 in tall, 8 ft 6 in
-  wide, ~72 ft long, 5 axles), so routes respect low bridges and length limits. Only weight is
-  entered by the user.
+  wide, ~72 ft long, 5 axles), so routes respect low bridges and length limits. Dimensions are
+  converted to metres rounded *up* to the next centimetre, so a clearance is never overstated.
+- A departure time that doesn't exist locally (the hour skipped when clocks spring forward) is
+  rejected. In the repeated hour when clocks fall back, the first occurrence is used.
 - The truck is governed at **65 mph** (sent to the router as a 104 km/h maximum speed: the router
   takes whole km/h, so the value is rounded down to never exceed 65 mph). There is no federal
   truck speed cap (a 65 mph limiter rule was proposed and withdrawn in July 2025), but most large

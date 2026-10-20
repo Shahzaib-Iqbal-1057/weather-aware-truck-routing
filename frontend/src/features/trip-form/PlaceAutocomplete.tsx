@@ -37,7 +37,11 @@ export function PlaceAutocomplete({
 
   const query = useDebouncedValue(text.trim(), DEBOUNCE_MS)
   const search = usePlaceSearch(query, value === null)
-  const suggestions = search.data ?? []
+  // Suggestions for older text are never shown or selectable, so a quick Enter can't pick the
+  // wrong place (e.g. "Springfield, MO" while the user is still typing "Springfield, IL").
+  const isStale = query !== text.trim()
+  const suggestions = isStale ? [] : (search.data ?? [])
+  const active = Math.max(0, Math.min(highlighted, suggestions.length - 1))
   const showList = isOpen && value === null && text.trim().length >= MIN_QUERY_LENGTH
 
   function select(place: Place) {
@@ -57,13 +61,14 @@ export function PlaceAutocomplete({
     if (!showList) return
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setHighlighted((i) => Math.min(i + 1, suggestions.length - 1))
+      setHighlighted(Math.max(0, Math.min(active + 1, suggestions.length - 1)))
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
-      setHighlighted((i) => Math.max(i - 1, 0))
-    } else if (event.key === 'Enter' && suggestions[highlighted]) {
+      setHighlighted(Math.max(active - 1, 0))
+    } else if (event.key === 'Enter') {
+      // Never submit the form from an open list: pick the highlighted place or do nothing.
       event.preventDefault()
-      select(suggestions[highlighted])
+      if (suggestions[active]) select(suggestions[active])
     } else if (event.key === 'Escape') {
       setIsOpen(false)
     }
@@ -82,7 +87,7 @@ export function PlaceAutocomplete({
         aria-autocomplete="list"
         aria-expanded={showList}
         aria-controls={listId}
-        aria-activedescendant={showList && suggestions.length ? optionId(highlighted) : undefined}
+        aria-activedescendant={showList && suggestions.length ? optionId(active) : undefined}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         placeholder={placeholder}
@@ -99,7 +104,7 @@ export function PlaceAutocomplete({
               key={`${place.label}-${place.lat}-${place.lon}`}
               id={optionId(index)}
               role="option"
-              aria-selected={index === highlighted}
+              aria-selected={index === active}
               className="place-autocomplete__option"
               // mousedown (not click) so the input does not blur and close the list first
               onMouseDown={(event) => {
@@ -113,10 +118,10 @@ export function PlaceAutocomplete({
             </li>
           ))}
           {suggestions.length === 0 && (
-            <li className="place-autocomplete__status" role="presentation">
+            <li className="place-autocomplete__status" role="presentation" aria-live="polite">
               {search.isError
                 ? 'Location search is unavailable right now.'
-                : search.isFetching || query !== text.trim()
+                : search.isFetching || isStale
                   ? 'Searching…'
                   : 'No US places found.'}
             </li>

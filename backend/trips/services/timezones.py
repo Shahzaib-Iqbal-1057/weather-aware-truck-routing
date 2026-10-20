@@ -1,3 +1,5 @@
+"""Time zone at a point (offline lookup from a bundled shape file)."""
+
 from functools import cache
 
 from timezonefinder import TimezoneFinder

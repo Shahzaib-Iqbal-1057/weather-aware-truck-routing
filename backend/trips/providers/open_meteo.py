@@ -11,12 +11,22 @@ import requests
 
 from trips.domain.geo import LatLon
 from trips.domain.weather import HourlyWeather
-from trips.providers.base import ProviderError
+from trips.providers.base import MALFORMED_RESPONSE_ERRORS, ProviderError
 
 FREE_URL = "https://api.open-meteo.com/v1/forecast"
 PAID_URL = "https://customer-api.open-meteo.com/v1/forecast"
 # Locations per request. Keeps URLs short; a long trip needs only a few requests.
 BATCH_SIZE = 100
+# The units the risk rules need, as Open-Meteo labels them. Checked on every response so a change
+# on their side can never silently feed, say, km/h or mm into the risk thresholds.
+EXPECTED_UNITS = {
+    "wind_speed_10m": "mp/h",
+    "wind_gusts_10m": "mp/h",
+    "rain": "inch",
+    "showers": "inch",
+    "snowfall": "inch",
+    "temperature_2m": "°F",
+}
 VARIABLES = (
     "wind_speed_10m",
     "wind_gusts_10m",
@@ -43,7 +53,11 @@ class OpenMeteoWeather:
         for i in range(0, len(points), BATCH_SIZE):
             batch = points[i : i + BATCH_SIZE]
             results = self._fetch(batch, start, end)
-            forecasts.update(zip(batch, (parse_hourly(r) for r in results), strict=True))
+            try:
+                parsed = [parse_hourly(result) for result in results]
+            except MALFORMED_RESPONSE_ERRORS:
+                raise ProviderError("Open-Meteo returned an unexpected response.") from None
+            forecasts.update(zip(batch, parsed, strict=True))
         return forecasts
 
     def _fetch(self, points: list[LatLon], start: datetime, end: datetime) -> list[dict[str, Any]]:
@@ -72,7 +86,10 @@ class OpenMeteoWeather:
         if response.status_code != 200:
             raise ProviderError(f"Open-Meteo failed with HTTP {response.status_code}.")
 
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError:
+            raise ProviderError("Open-Meteo returned an unexpected response.") from None
         # One location comes back as an object, several as a list.
         results = payload if isinstance(payload, list) else [payload]
         if len(results) != len(points):
@@ -86,6 +103,12 @@ def _hour_param(moment: datetime) -> str:
 
 def parse_hourly(result: dict[str, Any]) -> list[HourlyWeather]:
     """Hours with any risk value missing are left out, so they read as "unknown", never as calm."""
+    units = result["hourly_units"]
+    wrong = {
+        name: units.get(name) for name, unit in EXPECTED_UNITS.items() if units.get(name) != unit
+    }
+    if wrong:
+        raise ProviderError(f"Open-Meteo returned unexpected units: {wrong}")
     hourly = result["hourly"]
     records = []
     for i, timestamp in enumerate(hourly["time"]):

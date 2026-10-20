@@ -14,6 +14,11 @@ class ProviderError(Exception):
     """
 
 
+# Raised by json parsing and by reading fields from an unexpected payload shape. Providers turn
+# these into ProviderError, so a garbled reply is handled like any other provider failure.
+MALFORMED_RESPONSE_ERRORS = (ValueError, KeyError, TypeError, IndexError)
+
+
 class NoRouteError(ProviderError):
     """The router found no drivable route (e.g. across an ocean, or every option was avoided)."""
 

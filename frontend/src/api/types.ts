@@ -23,7 +23,8 @@ export interface TripPlanRequest {
   destination: Pick<Place, 'label' | 'lat' | 'lon' | 'kind'>
   /** Wall-clock time in the origin's time zone, "YYYY-MM-DDTHH:MM". */
   departure_local: string
-  weight_lb: number
+  /** Freight only; the empty truck is assumed to weigh 35,000 lb. */
+  cargo_weight_lb: number
 }
 
 export interface Trip {
@@ -33,7 +34,7 @@ export interface Trip {
   departure_utc: string
   departure_timezone: string
   departure_timezone_abbr: string
-  weight_lb: number
+  cargo_weight_lb: number
   spacing_mi: number
 }
 
@@ -79,7 +80,6 @@ export interface RouteResult {
   /** Door to door, including rest stops. */
   trip_time_s: number
   arrival_utc: string
-  traffic_delay_s: number
   /** Simplified display line, [lon, lat] pairs. */
   geometry: [number, number][]
   /** [lon, lat] for the map label, on road no other route uses. */

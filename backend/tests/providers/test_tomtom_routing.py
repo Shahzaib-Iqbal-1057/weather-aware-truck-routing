@@ -52,7 +52,6 @@ def test_parse_interpolates_distance_and_time_between_progress_points():
     assert route.times_s == pytest.approx([0, 120, 240, 300], abs=1)
     assert route.length_m == 3000
     assert route.travel_time_s == 300
-    assert route.traffic_delay_s == 20
 
 
 def test_parse_joins_legs_without_repeating_the_shared_point():
@@ -96,7 +95,7 @@ def fake_session(*, status_code=200, payload=None, error=None) -> Mock:
 
 
 def route(router, **kwargs):
-    defaults = {"depart_at": DEPART, "vehicle": standard_semi(65_000), "max_alternatives": 3}
+    defaults = {"depart_at": DEPART, "vehicle": standard_semi(30_000), "max_alternatives": 3}
     return router.routes(ORIGIN, DESTINATION, **(defaults | kwargs))
 
 
@@ -111,8 +110,8 @@ def test_requests_a_truck_route_with_weight_dimensions_and_departure():
     assert url.endswith("/calculateRoute/39.7392,-104.9903:38.8339,-104.8214/json")
     assert params["travelMode"] == "truck"
     assert params["vehicleCommercial"] == "true"
-    assert params["vehicleWeight"] == 29_484  # 65,000 lb in kg
-    assert params["vehicleHeight"] == 4.11
+    assert params["vehicleWeight"] == 29_484  # 30,000 lb cargo + 35,000 lb truck, in kg
+    assert params["vehicleHeight"] == 4.12  # 13 ft 6 in, rounded up to the cm
     assert params["vehicleNumberOfAxles"] == 5
     assert params["vehicleMaxSpeed"] == 104  # 65 mph = 104.6 km/h, rounded down so never over 65
     assert params["departAt"] == "2026-10-20T14:00:00Z"
@@ -179,3 +178,13 @@ def test_network_errors_raise_provider_error_without_leaking_key():
 def test_missing_api_key_fails_clearly():
     with pytest.raises(ProviderError, match="not configured"):
         route(TomTomRouter(""))
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{"routes": [{"legs": []}]}, {"routes": [{"summary": {}, "legs": [{"points": [{}]}]}]}],
+)
+def test_garbled_route_responses_raise_provider_error(payload):
+    session = fake_session(payload=payload)
+    with pytest.raises(ProviderError, match="unexpected response"):
+        route(TomTomRouter("secret-key", session=session))

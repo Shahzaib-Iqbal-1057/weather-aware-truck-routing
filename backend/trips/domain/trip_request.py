@@ -1,6 +1,7 @@
 """Stage 0: turn raw form input into a validated TripRequest.
 
-All business rules for the input live here, so the API layer only parses types.
+All business rules for the input live here, so the API layer only parses types. Time zones are
+looked up by the caller (it is file I/O), keeping this module pure.
 """
 
 from dataclasses import dataclass, replace
@@ -8,11 +9,13 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from trips.domain.geo import haversine_miles
-from trips.domain.timezones import timezone_at
 from trips.domain.types import Place
 
-WEIGHT_MIN_LB = 1_000
-WEIGHT_MAX_LB = 80_000  # US federal limit without an overweight permit
+# The brief's "load weight" is the cargo (payload), not the whole truck: an empty tractor with a
+# 53 ft trailer already weighs ~35,000 lb, so its 30,000 / 40,000 lb rules only make sense for
+# cargo. Max cargo = 80,000 lb federal gross limit − 35,000 lb empty truck (see vehicle.py).
+CARGO_MIN_LB = 0  # an empty (deadhead) trailer is a valid trip
+CARGO_MAX_LB = 45_000
 SPACING_OPTIONS_MI = (10, 25, 50)
 # Weather is checked every 10 miles: close to the forecast model's own resolution, and still few
 # enough points to batch into one weather request. 25 and 50 stay accepted by the API.
@@ -30,7 +33,7 @@ class TripRequest:
     destination: Place
     departure_utc: datetime
     departure_timezone: str
-    weight_lb: int
+    cargo_weight_lb: int
     spacing_mi: int
 
     @property
@@ -49,8 +52,10 @@ def build_trip_request(
     origin: Place,
     destination: Place,
     departure_local: datetime,
-    weight_lb: int,
+    cargo_weight_lb: int,
     spacing_mi: int,
+    origin_timezone: str | None,
+    destination_timezone: str | None,
     now: datetime,
 ) -> tuple[TripRequest, list[str]]:
     """Validate the input and return the trip plus any non-blocking warnings.
@@ -60,16 +65,16 @@ def build_trip_request(
     """
     errors: dict[str, str] = {}
 
-    origin_tz = timezone_at(origin.lat, origin.lon)
-    if origin_tz is None:
+    if origin_timezone is None:
         errors["origin"] = "Could not determine the time zone for this origin."
-    destination_tz = timezone_at(destination.lat, destination.lon)
 
     if haversine_miles(origin.lat, origin.lon, destination.lat, destination.lon) < MIN_TRIP_MILES:
         errors["destination"] = "Destination must be a different place from the origin."
 
-    if not WEIGHT_MIN_LB <= weight_lb <= WEIGHT_MAX_LB:
-        errors["weight_lb"] = f"Weight must be between {WEIGHT_MIN_LB:,} and {WEIGHT_MAX_LB:,} lb."
+    if not CARGO_MIN_LB <= cargo_weight_lb <= CARGO_MAX_LB:
+        errors["cargo_weight_lb"] = (
+            f"Cargo weight must be between {CARGO_MIN_LB:,} and {CARGO_MAX_LB:,} lb."
+        )
 
     if spacing_mi not in SPACING_OPTIONS_MI:
         options = ", ".join(str(option) for option in SPACING_OPTIONS_MI)
@@ -79,9 +84,15 @@ def build_trip_request(
     departure_utc = None
     if departure_local.tzinfo is not None:
         errors["departure_local"] = "Departure time must not include a time zone offset."
-    elif origin_tz is not None:
-        departure_utc = departure_local.replace(tzinfo=ZoneInfo(origin_tz)).astimezone(UTC)
-        if departure_utc < now - PAST_DEPARTURE_GRACE:
+    elif origin_timezone is not None:
+        zone = ZoneInfo(origin_timezone)
+        departure_utc = departure_local.replace(tzinfo=zone).astimezone(UTC)
+        if departure_utc.astimezone(zone).replace(tzinfo=None) != departure_local:
+            # e.g. 2:30 AM on the day clocks spring forward never happens there.
+            errors["departure_local"] = (
+                "That time is skipped when clocks change for daylight saving. Choose another time."
+            )
+        elif departure_utc < now - PAST_DEPARTURE_GRACE:
             errors["departure_local"] = "Departure time is in the past."
         elif departure_utc > now + MAX_DEPARTURE_AHEAD:
             errors["departure_local"] = "Departure must be within the next 7 days."
@@ -93,13 +104,13 @@ def build_trip_request(
     if errors:
         raise TripValidationError(errors)
 
-    assert origin_tz is not None and departure_utc is not None
+    assert origin_timezone is not None and departure_utc is not None
     trip = TripRequest(
-        origin=replace(origin, timezone=origin_tz),
-        destination=replace(destination, timezone=destination_tz),
+        origin=replace(origin, timezone=origin_timezone),
+        destination=replace(destination, timezone=destination_timezone),
         departure_utc=departure_utc,
-        departure_timezone=origin_tz,
-        weight_lb=weight_lb,
+        departure_timezone=origin_timezone,
+        cargo_weight_lb=cargo_weight_lb,
         spacing_mi=spacing_mi,
     )
     return trip, warnings

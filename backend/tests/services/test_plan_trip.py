@@ -42,7 +42,7 @@ def make_trip(departure_utc: datetime | None = None) -> TripRequest:
         destination=Place(label="Destination", lat=END[0], lon=END[1]),
         departure_utc=departure_utc or timezone.now() + timedelta(hours=2),
         departure_timezone="America/Chicago",
-        weight_lb=65_000,
+        cargo_weight_lb=30_000,
         spacing_mi=10,
     )
 
@@ -105,14 +105,14 @@ def test_departure_in_the_recent_past_is_sent_as_now():
     assert router.calls[0]["depart_at"] > datetime.now(UTC)
 
 
-def test_sends_a_standard_semi_with_the_trip_weight():
+def test_sends_a_standard_semi_with_cargo_plus_the_empty_truck_weight():
     router = FakeRouter([DIRECT, NORTH, SOUTH])
 
-    plan_trip(make_trip(), router=router)
+    plan_trip(make_trip(), router=router)  # 30,000 lb cargo
 
     vehicle = router.calls[0]["vehicle"]
-    assert round(vehicle.weight_kg) == 29_484
-    assert vehicle.height_m == 4.11
+    assert round(vehicle.weight_kg) == 29_484  # 65,000 lb gross
+    assert vehicle.height_m == 4.12
 
 
 def test_each_route_gets_checkpoints_from_the_trip_departure():
@@ -146,3 +146,21 @@ def test_routes_are_still_returned_when_weather_fails():
     assert not plan.weather_available
     assert all(w is None for planned in plan.routes for w in planned.weather)
     assert any("Weather is unavailable" in note for note in plan.notes)
+
+
+def test_a_failed_detour_request_keeps_the_routes_already_found():
+    router = FakeRouter([DIRECT, NORTH], ProviderError("HTTP 429"))
+
+    plan = plan_trip(make_trip(), router=router)
+
+    assert routes_of(plan) == [DIRECT, NORTH]
+    assert plan.notes[0] == "Only 2 distinct truck routes exist for this trip."
+
+
+def test_a_failed_detour_is_not_cached_so_the_next_plan_tries_again():
+    trip = make_trip()
+    plan_trip(trip, router=FakeRouter([DIRECT, NORTH], ProviderError("HTTP 429")))
+
+    plan = plan_trip(trip, router=FakeRouter([DIRECT, NORTH], [SOUTH]))
+
+    assert routes_of(plan) == [DIRECT, NORTH, SOUTH]

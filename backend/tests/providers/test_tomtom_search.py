@@ -110,3 +110,10 @@ def test_search_raises_on_network_error():
         TomTomGeocoder("secret-key", session=session).search("dallas", limit=5)
 
     assert "secret-key" not in str(exc_info.value)
+
+
+def test_garbled_search_response_raises_provider_error():
+    session = Mock()
+    session.get.return_value = Mock(status_code=200, json=Mock(side_effect=ValueError("html")))
+    with pytest.raises(ProviderError, match="unexpected response"):
+        TomTomGeocoder("secret-key", session=session).search("dallas", limit=5)

@@ -1,12 +1,12 @@
 import type { Place } from '../../api/types'
-import { zonedWallClockToUtc } from '../../lib/zonedTime'
+import { wallClockInZone, zonedWallClockToUtc } from '../../lib/zonedTime'
 import {
   MAX_DEPARTURE_AHEAD_DAYS,
   MIN_TRIP_MILES,
   PAST_DEPARTURE_GRACE_MINUTES,
   RELIABLE_FORECAST_HOURS,
-  WEIGHT_MAX_LB,
-  WEIGHT_MIN_LB,
+  CARGO_MAX_LB,
+  CARGO_MIN_LB,
 } from './rules'
 
 export interface TripFormValues {
@@ -15,10 +15,10 @@ export interface TripFormValues {
   /** Wall clock in `departureTimeZone`, "YYYY-MM-DDTHH:MM". */
   departureLocal: string
   departureTimeZone: string
-  weightLb: string
+  cargoWeightLb: string
 }
 
-export type TripFormField = 'origin' | 'destination' | 'departureLocal' | 'weightLb'
+export type TripFormField = 'origin' | 'destination' | 'departureLocal' | 'cargoWeightLb'
 export type TripFormErrors = Partial<Record<TripFormField, string>>
 
 const HOUR_MS = 3_600_000
@@ -49,17 +49,21 @@ export function validateTripForm(values: TripFormValues, now: Date): TripFormErr
   const departure = parseDeparture(values)
   if (!departure) {
     errors.departureLocal = 'Enter a departure date and time.'
+  } else if (wallClockInZone(departure, values.departureTimeZone) !== values.departureLocal) {
+    // e.g. 2:30 AM on the day clocks spring forward never happens there.
+    errors.departureLocal =
+      'That time is skipped when clocks change for daylight saving. Choose another time.'
   } else if (departure.getTime() < now.getTime() - PAST_DEPARTURE_GRACE_MINUTES * 60_000) {
     errors.departureLocal = 'Departure time is in the past.'
   } else if (departure.getTime() > now.getTime() + MAX_DEPARTURE_AHEAD_DAYS * 24 * HOUR_MS) {
     errors.departureLocal = `Departure must be within the next ${MAX_DEPARTURE_AHEAD_DAYS} days.`
   }
 
-  const weight = Number(values.weightLb)
-  if (values.weightLb.trim() === '' || !Number.isInteger(weight)) {
-    errors.weightLb = 'Enter the total weight in whole pounds.'
-  } else if (weight < WEIGHT_MIN_LB || weight > WEIGHT_MAX_LB) {
-    errors.weightLb = `Weight must be between ${WEIGHT_MIN_LB.toLocaleString('en-US')} and ${WEIGHT_MAX_LB.toLocaleString('en-US')} lb.`
+  const cargo = Number(values.cargoWeightLb)
+  if (values.cargoWeightLb.trim() === '' || !Number.isInteger(cargo)) {
+    errors.cargoWeightLb = 'Enter the cargo weight in whole pounds (0 for an empty trailer).'
+  } else if (cargo < CARGO_MIN_LB || cargo > CARGO_MAX_LB) {
+    errors.cargoWeightLb = `Cargo weight must be between ${CARGO_MIN_LB.toLocaleString('en-US')} and ${CARGO_MAX_LB.toLocaleString('en-US')} lb.`
   }
 
   return errors

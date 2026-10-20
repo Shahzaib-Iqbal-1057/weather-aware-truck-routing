@@ -12,11 +12,10 @@ from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from trips.domain.geo import LatLon
+from trips.domain.geo import METERS_PER_MILE, LatLon
 from trips.domain.hours_of_service import StopKind, elapsed_s, rest_schedule
 from trips.domain.types import Route
 
-METERS_PER_MILE = 1609.344
 SKIP_NEAR_END_MI = 2.0
 
 

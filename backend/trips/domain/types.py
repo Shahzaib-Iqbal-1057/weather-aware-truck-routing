@@ -28,7 +28,6 @@ class Route:
     points: list[tuple[float, float]]
     distances_m: list[float]
     times_s: list[float]
-    traffic_delay_s: float = 0.0
 
     @property
     def length_m(self) -> float:

@@ -4,7 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from trips.domain.candidates import label_points
-from trips.domain.geo import LatLon, simplify
+from trips.domain.geo import METERS_PER_MILE, LatLon, simplify
 from trips.domain.trip_request import (
     DEFAULT_SPACING_MI,
     TripRequest,
@@ -14,6 +14,7 @@ from trips.domain.trip_request import (
 from trips.domain.types import Place, PlaceKind
 from trips.domain.weather import HourlyWeather, describe_conditions
 from trips.services.plan_trip import PlannedRoute, TripPlan
+from trips.services.timezones import timezone_at
 
 
 class LocalDateTimeField(serializers.Field):
@@ -56,12 +57,18 @@ class TripPlanRequestSerializer(serializers.Serializer):
     origin = PlaceSerializer()
     destination = PlaceSerializer()
     departure_local = LocalDateTimeField()
-    weight_lb = serializers.IntegerField()
+    cargo_weight_lb = serializers.IntegerField()
     spacing_mi = serializers.IntegerField(default=DEFAULT_SPACING_MI)
 
     def validate(self, attrs: dict) -> dict:
+        origin, destination = attrs["origin"], attrs["destination"]
         try:
-            trip, warnings = build_trip_request(**attrs, now=timezone.now())
+            trip, warnings = build_trip_request(
+                **attrs,
+                origin_timezone=timezone_at(origin.lat, origin.lon),
+                destination_timezone=timezone_at(destination.lat, destination.lon),
+                now=timezone.now(),
+            )
         except TripValidationError as exc:
             raise serializers.ValidationError(exc.errors) from None
         return {"trip": trip, "warnings": warnings}
@@ -74,7 +81,7 @@ class TripSerializer(serializers.Serializer):
     departure_utc = serializers.DateTimeField()
     departure_timezone = serializers.CharField()
     departure_timezone_abbr = serializers.SerializerMethodField()
-    weight_lb = serializers.IntegerField()
+    cargo_weight_lb = serializers.IntegerField()
     spacing_mi = serializers.IntegerField()
 
     def get_departure_local(self, trip: TripRequest) -> str:
@@ -84,7 +91,6 @@ class TripSerializer(serializers.Serializer):
         return trip.departure_local.strftime("%Z")
 
 
-METERS_PER_MILE = 1609.344
 # Display lines are simplified: a point that deviates less than this from the line is dropped.
 # The full geometry stays on the server for checkpoint placement.
 DISPLAY_TOLERANCE_M = 25.0
@@ -113,7 +119,6 @@ def _serialize_route(route_id: str, planned: PlannedRoute, label: LatLon) -> dic
         "driving_time_s": round(timeline.driving_s),
         "trip_time_s": round(timeline.trip_s),  # door to door, including rest stops
         "arrival_utc": _utc(timeline.arrival),
-        "traffic_delay_s": round(route.traffic_delay_s),
         "geometry": [_lon_lat(point) for point in simplify(route.points, DISPLAY_TOLERANCE_M)],
         # Where to put the route's map label: on road no other route shares.
         "label_position": _lon_lat(label),

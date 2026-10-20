@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
 import type { GeocodeResponse } from './types'
 
@@ -10,7 +10,6 @@ export function usePlaceSearch(query: string, enabled: boolean) {
     queryFn: () => apiGet<GeocodeResponse>('/geocode/', { q: query }).then((data) => data.results),
     enabled: enabled && query.length >= MIN_QUERY_LENGTH,
     staleTime: Infinity,
-    placeholderData: keepPreviousData,
     retry: false,
   })
 }

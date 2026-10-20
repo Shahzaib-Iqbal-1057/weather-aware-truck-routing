@@ -10,7 +10,13 @@ import {
 import { useNow } from '../../lib/useNow'
 import { PlaceAutocomplete } from './PlaceAutocomplete'
 import './TripForm.css'
-import { MAX_DEPARTURE_AHEAD_DAYS, WEIGHT_MAX_LB, WEIGHT_MIN_LB } from './rules'
+import {
+  CARGO_MAX_LB,
+  CARGO_MIN_LB,
+  EMPTY_TRUCK_LB,
+  LEGAL_GROSS_LB,
+  MAX_DEPARTURE_AHEAD_DAYS,
+} from './rules'
 import {
   departureWarning,
   validateTripForm,
@@ -28,6 +34,14 @@ interface TripFormProps {
 
 const DAY_MS = 24 * 3_600_000
 
+// Form values that are fields the server can report errors on.
+const FIELD_KEYS: Record<TripFormField, true> = {
+  origin: true,
+  destination: true,
+  departureLocal: true,
+  cargoWeightLb: true,
+}
+
 export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }: TripFormProps) {
   const [values, setValues] = useState<TripFormValues>(() => {
     const timeZone = browserTimeZone()
@@ -36,19 +50,28 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
       destination: null,
       departureLocal: defaultDeparture(new Date(), timeZone),
       departureTimeZone: timeZone,
-      weightLb: '',
+      cargoWeightLb: '',
     }
   })
   const [departureEdited, setDepartureEdited] = useState(false)
   const [clientErrors, setClientErrors] = useState<TripFormErrors>({})
   const [submitted, setSubmitted] = useState(false)
+  // Fields edited since the last submit: the server's verdict on them is out of date.
+  const [editedSinceSubmit, setEditedSinceSubmit] = useState<ReadonlySet<TripFormField>>(new Set())
 
-  const errors = { ...serverErrors, ...clientErrors }
+  const currentServerErrors = Object.fromEntries(
+    Object.entries(serverErrors).filter(
+      ([field]) => !editedSinceSubmit.has(field as TripFormField),
+    ),
+  )
+  const errors = { ...currentServerErrors, ...clientErrors }
   const now = useNow()
 
   function update(patch: Partial<TripFormValues>) {
     const next = { ...values, ...patch }
     setValues(next)
+    const edited = Object.keys(patch).filter((key): key is TripFormField => key in FIELD_KEYS)
+    setEditedSinceSubmit((previous) => new Set([...previous, ...edited]))
     // After the first submit attempt, keep errors in sync as the user fixes them.
     if (submitted) setClientErrors(validateTripForm(next, new Date()))
   }
@@ -66,6 +89,7 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setSubmitted(true)
+    setEditedSinceSubmit(new Set())
     const found = validateTripForm(values, new Date())
     setClientErrors(found)
     if (Object.keys(found).length > 0 || !values.origin || !values.destination) return
@@ -80,7 +104,7 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
         kind: destination.kind,
       },
       departure_local: values.departureLocal,
-      weight_lb: Number(values.weightLb),
+      cargo_weight_lb: Number(values.cargoWeightLb),
     })
   }
 
@@ -138,23 +162,27 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
       </div>
 
       <div className="field">
-        <label htmlFor="weight">Total weight (lb)</label>
+        <label htmlFor="cargo-weight">Cargo weight (lb)</label>
         <input
-          id="weight"
+          id="cargo-weight"
           type="number"
           inputMode="numeric"
-          min={WEIGHT_MIN_LB}
-          max={WEIGHT_MAX_LB}
+          min={CARGO_MIN_LB}
+          max={CARGO_MAX_LB}
           step={1}
-          placeholder="e.g. 65000"
-          value={values.weightLb}
-          aria-invalid={Boolean(fieldError('weightLb'))}
-          onChange={(event) => update({ weightLb: event.target.value })}
+          placeholder="e.g. 30000"
+          value={values.cargoWeightLb}
+          aria-invalid={Boolean(fieldError('cargoWeightLb'))}
+          onChange={(event) => update({ cargoWeightLb: event.target.value })}
         />
         <p className="field__hint">
-          Truck plus cargo, up to {WEIGHT_MAX_LB.toLocaleString('en-US')} lb.
+          Freight only, up to {CARGO_MAX_LB.toLocaleString('en-US')} lb. The truck itself is assumed
+          to weigh {EMPTY_TRUCK_LB.toLocaleString('en-US')} lb (
+          {LEGAL_GROSS_LB.toLocaleString('en-US')} lb legal maximum in total).
         </p>
-        {fieldError('weightLb') && <p className="field__error">{fieldError('weightLb')}</p>}
+        {fieldError('cargoWeightLb') && (
+          <p className="field__error">{fieldError('cargoWeightLb')}</p>
+        )}
       </div>
 
       {generalError && <p className="trip-form__error">{generalError}</p>}

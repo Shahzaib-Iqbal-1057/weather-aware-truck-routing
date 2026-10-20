@@ -6,7 +6,7 @@ from urllib.parse import quote
 import requests
 
 from trips.domain.types import Place, PlaceKind
-from trips.providers.base import ProviderError
+from trips.providers.base import MALFORMED_RESPONSE_ERRORS, ProviderError
 
 SEARCH_URL = "https://api.tomtom.com/search/2/search/{query}.json"
 
@@ -45,7 +45,10 @@ class TomTomGeocoder:
         if response.status_code != 200:
             raise ProviderError(f"TomTom search failed with HTTP {response.status_code}.")
 
-        return parse_search_results(response.json())[:limit]
+        try:
+            return parse_search_results(response.json())[:limit]
+        except MALFORMED_RESPONSE_ERRORS:
+            raise ProviderError("TomTom search returned an unexpected response.") from None
 
 
 def parse_search_results(payload: dict[str, Any]) -> list[Place]:

@@ -50,7 +50,7 @@ def post(**overrides):
         "origin": DENVER,
         "destination": DALLAS,
         "departure_local": denver_wall_clock(2),
-        "weight_lb": 40_000,
+        "cargo_weight_lb": 30_000,
         "spacing_mi": 10,
     } | overrides
     return APIClient().post(reverse("trip-plan"), payload, format="json")
@@ -78,7 +78,7 @@ def test_spacing_defaults_to_10_miles():
         "origin": DENVER,
         "destination": DALLAS,
         "departure_local": denver_wall_clock(2),
-        "weight_lb": 40_000,
+        "cargo_weight_lb": 30_000,
     }
 
     response = APIClient().post(reverse("trip-plan"), payload, format="json")
@@ -94,10 +94,10 @@ def test_returns_warning_for_departure_beyond_48_hours():
 
 
 def test_returns_field_errors_for_rule_violations():
-    response = post(weight_lb=90_000, destination=DENVER)
+    response = post(cargo_weight_lb=90_000, destination=DENVER)
 
     assert response.status_code == 400
-    assert set(response.json()) == {"weight_lb", "destination"}
+    assert set(response.json()) == {"cargo_weight_lb", "destination"}
 
 
 def test_rejects_malformed_input():

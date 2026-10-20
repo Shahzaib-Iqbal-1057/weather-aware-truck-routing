@@ -24,8 +24,10 @@ function Harness({ onChange }: { onChange: (place: Place | null) => void }) {
   )
 }
 
-function setup() {
-  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: RESULTS })))
+function setup(results: Place[] = RESULTS) {
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(async () => new Response(JSON.stringify({ results })))
   vi.stubGlobal('fetch', fetchMock)
   const onChange = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -83,5 +85,31 @@ describe('PlaceAutocomplete', () => {
     fireEvent.change(input, { target: { value: 'Springfield, M' } })
 
     expect(onChange).toHaveBeenLastCalledWith(null)
+  })
+
+  it('does not select an old suggestion while newer text is still being searched', async () => {
+    const { input, onChange } = setup()
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: 'springf' } })
+    await screen.findAllByRole('option')
+
+    fireEvent.change(input, { target: { value: 'springfield il' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onChange).not.toHaveBeenCalledWith(RESULTS[0])
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(screen.getByText('Searching…')).toBeInTheDocument()
+  })
+
+  it('keeps a valid highlight when arrowing before results arrive', async () => {
+    const { input, onChange } = setup()
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: 'springf' } })
+    fireEvent.keyDown(input, { key: 'ArrowDown' }) // no results yet
+
+    await screen.findAllByRole('option')
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onChange).toHaveBeenLastCalledWith(RESULTS[0])
   })
 })

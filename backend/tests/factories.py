@@ -21,14 +21,10 @@ def path(*corners: tuple[float, float], steps_per_leg: int = 200) -> list[tuple[
     return points
 
 
-def make_route(
-    points: list[tuple[float, float]], hours: float, traffic_delay_s: float = 0
-) -> Route:
+def make_route(points: list[tuple[float, float]], hours: float) -> Route:
     distances = [0.0]
     for a, b in zip(points, points[1:], strict=False):
         distances.append(distances[-1] + haversine_meters(a, b))
     total_s = hours * 3600
     times = [total_s * d / distances[-1] for d in distances]
-    return Route(
-        points=points, distances_m=distances, times_s=times, traffic_delay_s=traffic_delay_s
-    )
+    return Route(points=points, distances_m=distances, times_s=times)

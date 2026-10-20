@@ -23,7 +23,17 @@ def location(**hourly_overrides):
         "temperature_2m": [54.0, 30.0],
         "weather_code": [61, 73],
     } | hourly_overrides
-    return {"latitude": 35.45, "longitude": -97.5, "hourly": hourly}
+    units = {
+        "time": "unixtime",
+        "wind_speed_10m": "mp/h",
+        "wind_gusts_10m": "mp/h",
+        "rain": "inch",
+        "showers": "inch",
+        "snowfall": "inch",
+        "temperature_2m": "°F",
+        "weather_code": "wmo code",
+    }
+    return {"latitude": 35.45, "longitude": -97.5, "hourly_units": units, "hourly": hourly}
 
 
 def test_parse_adds_showers_to_rain_and_keeps_units():
@@ -120,3 +130,25 @@ def test_network_errors_do_not_leak_the_key():
     with pytest.raises(ProviderError) as exc_info:
         OpenMeteoWeather("paid-key", session=session).hourly([(35.45, -97.5)], start=START, end=END)
     assert "paid-key" not in str(exc_info.value)
+
+
+def test_rejects_a_response_in_the_wrong_units():
+    metric = location()
+    metric["hourly_units"] = metric["hourly_units"] | {"wind_speed_10m": "km/h", "rain": "mm"}
+    session = fake_session(ok(metric))
+
+    with pytest.raises(ProviderError, match="unexpected units"):
+        OpenMeteoWeather(session=session).hourly([(35.45, -97.5)], start=START, end=END)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        Mock(status_code=200, json=Mock(side_effect=ValueError("not json"))),
+        ok({"latitude": 35.45}),  # no hourly data
+    ],
+)
+def test_garbled_responses_raise_provider_error(response):
+    session = fake_session(response)
+    with pytest.raises(ProviderError, match="unexpected response"):
+        OpenMeteoWeather(session=session).hourly([(35.45, -97.5)], start=START, end=END)

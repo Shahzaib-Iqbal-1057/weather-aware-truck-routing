@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from trips.domain import trip_request
 from trips.domain.trip_request import TripValidationError, build_trip_request
 from trips.domain.types import Place, PlaceKind
 
@@ -16,8 +15,10 @@ def build(**overrides):
         "origin": DENVER,
         "destination": DALLAS,
         "departure_local": datetime(2026, 10, 20, 8, 0),
-        "weight_lb": 40_000,
-        "spacing_mi": 25,
+        "cargo_weight_lb": 30_000,
+        "spacing_mi": 10,
+        "origin_timezone": "America/Denver",
+        "destination_timezone": "America/Chicago",
         "now": NOW,
     }
     return build_trip_request(**(values | overrides))
@@ -45,22 +46,22 @@ def test_departure_uses_standard_time_after_daylight_saving_ends():
     assert trip.departure_utc == datetime(2026, 11, 11, 15, 0, tzinfo=UTC)  # MST, UTC-7
 
 
-def test_both_places_get_their_own_time_zone():
+def test_both_places_carry_their_time_zone():
     trip, _ = build()
 
     assert trip.origin.timezone == "America/Denver"
     assert trip.destination.timezone == "America/Chicago"
 
 
-@pytest.mark.parametrize("weight_lb", [1_000, 30_000, 80_000])
-def test_accepts_weights_within_legal_range(weight_lb):
-    trip, _ = build(weight_lb=weight_lb)
-    assert trip.weight_lb == weight_lb
+@pytest.mark.parametrize("cargo", [0, 30_000, 45_000])
+def test_accepts_cargo_from_empty_to_the_legal_maximum(cargo):
+    trip, _ = build(cargo_weight_lb=cargo)
+    assert trip.cargo_weight_lb == cargo
 
 
-@pytest.mark.parametrize("weight_lb", [0, 999, 80_001, 150_000])
-def test_rejects_weights_outside_legal_range(weight_lb):
-    assert "weight_lb" in errors_of(weight_lb=weight_lb)
+@pytest.mark.parametrize("cargo", [-1, 45_001, 80_000])
+def test_rejects_cargo_outside_the_legal_range(cargo):
+    assert "cargo_weight_lb" in errors_of(cargo_weight_lb=cargo)
 
 
 @pytest.mark.parametrize("spacing_mi", [10, 25, 50])
@@ -105,11 +106,24 @@ def test_rejects_departure_with_an_offset():
     assert "departure_local" in errors
 
 
-def test_rejects_origin_without_a_time_zone(monkeypatch):
-    monkeypatch.setattr(trip_request, "timezone_at", lambda lat, lon: None)
-    assert "origin" in errors_of()
+def test_rejects_origin_without_a_time_zone():
+    assert "origin" in errors_of(origin_timezone=None)
+
+
+def test_rejects_a_departure_in_the_daylight_saving_gap():
+    # On 8 Mar 2026 Denver clocks jump from 2:00 to 3:00, so 2:30 never happens.
+    now = datetime(2026, 3, 7, 12, 0, tzinfo=UTC)
+    errors = errors_of(departure_local=datetime(2026, 3, 8, 2, 30), now=now)
+    assert "daylight saving" in errors["departure_local"]
+
+
+def test_accepts_the_repeated_hour_when_clocks_fall_back_as_its_first_occurrence():
+    # On 1 Nov 2026 Denver's 1:30 happens twice; the first (daylight time, UTC-6) is used.
+    now = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
+    trip, _ = build(departure_local=datetime(2026, 11, 1, 1, 30), now=now)
+    assert trip.departure_utc == datetime(2026, 11, 1, 7, 30, tzinfo=UTC)
 
 
 def test_reports_every_invalid_field_at_once():
-    errors = errors_of(weight_lb=90_000, spacing_mi=30, destination=DENVER)
-    assert set(errors) == {"weight_lb", "spacing_mi", "destination"}
+    errors = errors_of(cargo_weight_lb=90_000, spacing_mi=30, destination=DENVER)
+    assert set(errors) == {"cargo_weight_lb", "spacing_mi", "destination"}

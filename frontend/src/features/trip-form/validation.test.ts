@@ -24,7 +24,7 @@ function values(overrides: Partial<TripFormValues> = {}): TripFormValues {
     destination: DALLAS,
     departureLocal: '2026-10-20T08:00',
     departureTimeZone: 'America/Denver',
-    weightLb: '40000',
+    cargoWeightLb: '30000',
     ...overrides,
   }
 }
@@ -44,13 +44,16 @@ describe('validateTripForm', () => {
     expect(validateTripForm(values({ destination: DENVER }), NOW).destination).toMatch(/different/)
   })
 
-  it.each(['1000', '80000'])('accepts weight %s', (weightLb) => {
-    expect(validateTripForm(values({ weightLb }), NOW).weightLb).toBeUndefined()
+  it.each(['0', '30000', '45000'])('accepts cargo weight %s', (cargoWeightLb) => {
+    expect(validateTripForm(values({ cargoWeightLb }), NOW).cargoWeightLb).toBeUndefined()
   })
 
-  it.each(['', '999', '80001', '40000.5', 'abc'])('rejects weight "%s"', (weightLb) => {
-    expect(validateTripForm(values({ weightLb }), NOW).weightLb).toBeDefined()
-  })
+  it.each(['', '-1', '45001', '80000', '30000.5', 'abc'])(
+    'rejects cargo weight "%s"',
+    (cargoWeightLb) => {
+      expect(validateTripForm(values({ cargoWeightLb }), NOW).cargoWeightLb).toBeDefined()
+    },
+  )
 
   it('reads the departure in the origin time zone', () => {
     // 05:50 Denver = 10 minutes ago, inside the grace period.
@@ -67,6 +70,14 @@ describe('validateTripForm', () => {
     expect(
       validateTripForm(values({ departureLocal: '2026-10-27T08:00' }), NOW).departureLocal,
     ).toMatch(/7 days/)
+  })
+
+  it('rejects a departure in the daylight-saving gap', () => {
+    // 8 Mar 2026 in Denver: clocks jump from 2:00 to 3:00, so 2:30 never happens.
+    const now = new Date('2026-03-07T12:00:00Z')
+    expect(
+      validateTripForm(values({ departureLocal: '2026-03-08T02:30' }), now).departureLocal,
+    ).toMatch(/daylight saving/)
   })
 
   it('requires a departure time', () => {

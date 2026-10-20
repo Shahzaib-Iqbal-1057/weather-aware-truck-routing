@@ -12,7 +12,7 @@ import requests
 from trips.domain.geo import BoundingBox, haversine_meters
 from trips.domain.types import Place, Route
 from trips.domain.vehicle import VehicleProfile
-from trips.providers.base import NoRouteError, ProviderError
+from trips.providers.base import MALFORMED_RESPONSE_ERRORS, NoRouteError, ProviderError
 
 ROUTE_URL = "https://api.tomtom.com/routing/1/calculateRoute/{locations}/json"
 MAX_ALTERNATIVES = 5
@@ -58,7 +58,10 @@ class TomTomRouter:
 
         if response.status_code != 200:
             _raise_for_error(response)
-        return parse_routes(response.json())
+        try:
+            return parse_routes(response.json())
+        except MALFORMED_RESPONSE_ERRORS:
+            raise ProviderError("TomTom routing returned an unexpected response.") from None
 
 
 def _query_params(
@@ -122,12 +125,7 @@ def _parse_route(data: dict[str, Any]) -> Route:
 
     summary = data["summary"]
     distances, times = _interpolate_progress(points, data.get("progress", []), summary)
-    return Route(
-        points=points,
-        distances_m=distances,
-        times_s=times,
-        traffic_delay_s=float(summary.get("trafficDelayInSeconds", 0)),
-    )
+    return Route(points=points, distances_m=distances, times_s=times)
 
 
 def _interpolate_progress(

@@ -4,10 +4,10 @@ from dataclasses import replace
 from django.conf import settings
 from django.core.cache import cache
 
-from trips.domain.timezones import timezone_at
 from trips.domain.types import Place
 from trips.providers.base import Geocoder
 from trips.providers.tomtom_search import TomTomGeocoder
+from trips.services.timezones import timezone_at
 
 CACHE_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_LIMIT = 6
