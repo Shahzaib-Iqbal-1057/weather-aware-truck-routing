@@ -1,18 +1,18 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from django.utils import timezone
 from rest_framework import serializers
 
 from trips.domain.candidates import label_points
-from trips.domain.geo import simplify
+from trips.domain.geo import LatLon, simplify
 from trips.domain.trip_request import (
     DEFAULT_SPACING_MI,
     TripRequest,
     TripValidationError,
     build_trip_request,
 )
-from trips.domain.types import Place, PlaceKind, Route
-from trips.services.plan_trip import TripPlan
+from trips.domain.types import Place, PlaceKind
+from trips.services.plan_trip import PlannedRoute, TripPlan
 
 
 class LocalDateTimeField(serializers.Field):
@@ -89,37 +89,54 @@ METERS_PER_MILE = 1609.344
 DISPLAY_TOLERANCE_M = 25.0
 
 
-class RouteSerializer(serializers.Serializer):
-    """A route for the browser, labelled A, B, C in order of travel time."""
-
-    def to_representation(self, route: Route) -> dict:
-        index = self.context["index"][id(route)]
-        label_lat, label_lon = self.context["labels"][id(route)]
-        return {
-            "id": chr(ord("A") + index),
-            "distance_mi": round(route.length_m / METERS_PER_MILE, 1),
-            "travel_time_s": round(route.travel_time_s),
-            "traffic_delay_s": round(route.traffic_delay_s),
-            # GeoJSON order: [lon, lat]
-            "geometry": [
-                [round(lon, 5), round(lat, 5)]
-                for lat, lon in simplify(route.points, DISPLAY_TOLERANCE_M)
-            ],
-            # Where to put the route's map label: on road no other route shares.
-            "label_position": [round(label_lon, 5), round(label_lat, 5)],
-        }
-
-
 def serialize_plan(plan: TripPlan, warnings: list[str]) -> dict:
-    index = {id(route): i for i, route in enumerate(plan.routes)}
-    labels = {
-        id(route): point
-        for route, point in zip(plan.routes, label_points(plan.routes), strict=True)
-    }
-    context = {"index": index, "labels": labels}
+    """The planned trip for the browser. Routes are labelled A, B, C in order of arrival."""
+    labels = label_points([planned.route for planned in plan.routes])
     return {
         "trip": TripSerializer(plan.trip).data,
-        "routes": RouteSerializer(plan.routes, many=True, context=context).data,
+        "routes": [
+            _serialize_route(chr(ord("A") + i), planned, label)
+            for i, (planned, label) in enumerate(zip(plan.routes, labels, strict=True))
+        ],
         "notes": plan.notes,
         "warnings": warnings,
     }
+
+
+def _serialize_route(route_id: str, planned: PlannedRoute, label: LatLon) -> dict:
+    route, timeline = planned.route, planned.timeline
+    return {
+        "id": route_id,
+        "distance_mi": round(route.length_m / METERS_PER_MILE, 1),
+        "driving_time_s": round(timeline.driving_s),
+        "trip_time_s": round(timeline.trip_s),  # door to door, including rest stops
+        "arrival_utc": _utc(timeline.arrival),
+        "traffic_delay_s": round(route.traffic_delay_s),
+        "geometry": [_lon_lat(point) for point in simplify(route.points, DISPLAY_TOLERANCE_M)],
+        # Where to put the route's map label: on road no other route shares.
+        "label_position": _lon_lat(label),
+        "checkpoints": [
+            {"position": _lon_lat(c.position), "mile": round(c.mile, 1), "eta_utc": _utc(c.eta)}
+            for c in timeline.checkpoints
+        ],
+        "rest_stops": [
+            {
+                "kind": stop.kind.value,
+                "position": _lon_lat(stop.position),
+                "mile": round(stop.mile, 1),
+                "starts_utc": _utc(stop.starts),
+                "ends_utc": _utc(stop.ends),
+            }
+            for stop in timeline.stops
+        ],
+    }
+
+
+def _lon_lat(point: LatLon) -> list[float]:
+    """GeoJSON order: [lon, lat]."""
+    lat, lon = point
+    return [round(lon, 5), round(lat, 5)]
+
+
+def _utc(moment: datetime) -> str:
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")

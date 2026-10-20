@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { ApiError } from './api/client'
 import { usePlanTrip } from './api/trips'
 import type { RouteId } from './api/types'
+import { browserTimeZone } from './lib/zonedTime'
 import { BackendStatus } from './components/BackendStatus'
 import { RouteList } from './features/route-summary/RouteList'
 import { toFormErrors } from './features/trip-form/serverErrors'
@@ -41,6 +42,8 @@ export default function App() {
     ? selectedId
     : (routes[0]?.id ?? null)
   const { fields: serverErrors, general } = describeError(planTrip.error)
+  // All times are shown on the departure city's clock.
+  const timeZone = plan?.trip.departure_timezone ?? browserTimeZone()
 
   return (
     <div className="app">
@@ -66,6 +69,7 @@ export default function App() {
                 notes={plan.notes}
                 selectedId={activeId}
                 onSelect={setSelectedId}
+                timeZone={timeZone}
               />
               <TripSummary plan={plan} />
             </>
@@ -80,6 +84,7 @@ export default function App() {
               selectedId={activeId}
               onSelect={setSelectedId}
               isLoading={planTrip.isPending}
+              timeZone={timeZone}
             />
           </Suspense>
         </main>

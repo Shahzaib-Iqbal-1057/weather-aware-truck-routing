@@ -64,7 +64,7 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 |---|---|---|
 | GET | `/api/health/` | Liveness check |
 | GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
-| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes (cached 15 min, rate limited). Later stages add weather and risk. |
+| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs and required driver stops (routes cached 15 min, rate limited). Later stages add weather and risk. |
 
 ## How candidate routes are chosen
 
@@ -91,6 +91,35 @@ the other route (~1 km grid). The paper applies the 25% limit to every part of a
 API only returns whole routes, so it is applied to the whole trip. Requesting 3 alternatives rather
 than TomTom's maximum of 5 halves the response time and gave the same choices in testing.
 
+## Checkpoints and ETAs
+
+Weather is checked at **checkpoints every 10 miles** along each route, plus the start and the
+destination (a regular checkpoint within 2 miles of the destination is skipped).
+
+- **Why 10 miles:** the brief allows 10, 25 or 50. Forecast models resolve weather at roughly
+  3–13 km, so 10 miles (16 km) is close to the finest detail available, while 25 or 50 miles can
+  step over a single thunderstorm cell. Weather for all checkpoints is fetched in batched
+  requests that stay within the free weather API tier at demo volumes.
+- **Each checkpoint stands for the road halfway to its neighbours** (mile 20 covers miles 15–25;
+  the start and destination cover the half-gaps next to them). The covered miles add up exactly to
+  the route length, which is what "Severe miles" and "High miles" are counted from.
+- **ETA = departure + driving time to the point + required driver stops before it.** Driving time
+  comes from TomTom (truck speeds, typical traffic for the departure hour).
+
+**Driver stops (US hours-of-service rules for property-carrying drivers):**
+
+- a **30-minute break after 8 hours of driving**;
+- a **10-hour rest after 11 hours of driving**, after which a new shift starts and the pattern
+  repeats.
+
+The 30-minute break is not driving time, so a shift is 11 h of driving within 11.5 h, inside the
+14-hour on-duty window. Stops are placed where the driving clock reaches those limits. A route's
+**door-to-door time and arrival include these stops**; route cards show driving and rest time
+separately.
+
+**Times are shown on the departure city's clock** (e.g. "6:50 AM CDT") so a trip that crosses time
+zones reads on one consistent clock.
+
 ## Assumptions
 
 - Region: United States only.
@@ -107,3 +136,14 @@ than TomTom's maximum of 5 halves the response time and gave the same choices in
   wide, ~72 ft long, 5 axles), so routes respect low bridges and length limits. Only weight is
   entered by the user.
 - Wind risk uses sustained wind speed; gusts are shown for information.
+- The driver is driving solo and starts the trip fresh (no hours already used that day or week);
+  weekly 60/70-hour limits are not modelled.
+
+## Known limitations
+
+- Driver stops are placed exactly where the driving clock requires them; a real driver would stop
+  at the nearest truck stop or rest area, a few miles earlier or later.
+- TomTom's typical-traffic times assume the truck keeps driving. After a 10-hour rest the truck
+  meets a different hour's traffic than the router assumed. The effect is small next to the rest
+  itself.
+- ETAs do not yet slow down for bad weather.

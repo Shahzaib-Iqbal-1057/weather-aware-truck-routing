@@ -14,7 +14,9 @@ from trips.domain.types import Place
 WEIGHT_MIN_LB = 1_000
 WEIGHT_MAX_LB = 80_000  # US federal limit without an overweight permit
 SPACING_OPTIONS_MI = (10, 25, 50)
-DEFAULT_SPACING_MI = 25
+# Weather is checked every 10 miles: close to the forecast model's own resolution, and still few
+# enough points to batch into one weather request. 25 and 50 stay accepted by the API.
+DEFAULT_SPACING_MI = 10
 MIN_TRIP_MILES = 1.0
 
 MAX_DEPARTURE_AHEAD = timedelta(days=7)

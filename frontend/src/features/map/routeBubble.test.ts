@@ -1,19 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RouteResult } from '../../api/types'
+import { makeRoute } from '../../test/fixtures'
 import { createRouteBubble, routeBubbleText } from './routeBubble'
 
-const ROUTE: RouteResult = {
-  id: 'B',
-  distance_mi: 879,
-  travel_time_s: 13 * 3600 + 50 * 60,
-  traffic_delay_s: 0,
-  geometry: [],
-  label_position: [-97.5, 35.4],
-}
+const ROUTE = makeRoute({ id: 'B', driving_time_s: 13 * 3600, trip_time_s: 23 * 3600 + 30 * 60 })
 
 describe('route bubble', () => {
-  it('shows the route letter and travel time', () => {
-    expect(routeBubbleText(ROUTE)).toBe('B · 13 h 50 min')
+  it('shows the route letter and door-to-door time', () => {
+    expect(routeBubbleText(ROUTE)).toBe('B · 23 h 30 min')
   })
 
   it('is a button that reports its route when clicked', () => {

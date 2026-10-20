@@ -49,7 +49,7 @@ def post(**overrides):
         "destination": DALLAS,
         "departure_local": denver_wall_clock(2),
         "weight_lb": 40_000,
-        "spacing_mi": 25,
+        "spacing_mi": 10,
     } | overrides
     return APIClient().post(reverse("trip-plan"), payload, format="json")
 
@@ -71,7 +71,7 @@ def test_returns_normalized_trip():
     assert body["warnings"] == []
 
 
-def test_spacing_defaults_to_25_miles():
+def test_spacing_defaults_to_10_miles():
     payload = {
         "origin": DENVER,
         "destination": DALLAS,
@@ -81,7 +81,7 @@ def test_spacing_defaults_to_25_miles():
 
     response = APIClient().post(reverse("trip-plan"), payload, format="json")
 
-    assert response.json()["trip"]["spacing_mi"] == 25
+    assert response.json()["trip"]["spacing_mi"] == 10
 
 
 def test_returns_warning_for_departure_beyond_48_hours():
@@ -113,7 +113,7 @@ def test_returns_routes_labelled_by_travel_time():
     assert response.status_code == 200
     routes = response.json()["routes"]
     assert [r["id"] for r in routes] == ["A", "B", "C"]
-    assert [r["travel_time_s"] for r in routes] == [12 * 3600, 12.5 * 3600, 13 * 3600]
+    assert [r["driving_time_s"] for r in routes] == [12 * 3600, 12.5 * 3600, 13 * 3600]
     first = routes[0]
     assert first["distance_mi"] == pytest.approx(FAST.length_m / 1609.344, abs=0.1)
     # Display geometry is [lon, lat] and simplified (a straight line needs only its ends).
@@ -140,3 +140,20 @@ def test_routing_failure_returns_502(fake_router):
 
     assert response.status_code == 502
     assert response.json() == {"detail": "Route planning is temporarily unavailable."}
+
+
+def test_routes_include_checkpoints_rest_stops_and_arrival():
+    departure = denver_wall_clock(2)
+
+    route = post(departure_local=departure).json()["routes"][0]  # 12 h of driving
+
+    # 12 h of driving: 30-min break at 8 h, 10-h rest at 11 h.
+    assert [stop["kind"] for stop in route["rest_stops"]] == ["break", "rest"]
+    assert route["trip_time_s"] == 12 * 3600 + 30 * 60 + 10 * 3600
+    first, second = route["checkpoints"][0], route["checkpoints"][1]
+    assert first["mile"] == 0
+    assert second["mile"] == 10
+    assert first["eta_utc"].endswith("Z")
+    assert route["checkpoints"][-1]["eta_utc"] == route["arrival_utc"]
+    stop = route["rest_stops"][1]
+    assert set(stop) == {"kind", "position", "mile", "starts_utc", "ends_utc"}

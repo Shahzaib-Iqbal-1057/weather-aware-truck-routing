@@ -31,6 +31,10 @@ class FakeRouter:
         return response
 
 
+def routes_of(plan):
+    return [planned.route for planned in plan.routes]
+
+
 def make_trip(departure_utc: datetime | None = None) -> TripRequest:
     return TripRequest(
         origin=Place(label="Origin", lat=START[0], lon=START[1]),
@@ -38,7 +42,7 @@ def make_trip(departure_utc: datetime | None = None) -> TripRequest:
         departure_utc=departure_utc or timezone.now() + timedelta(hours=2),
         departure_timezone="America/Chicago",
         weight_lb=65_000,
-        spacing_mi=25,
+        spacing_mi=10,
     )
 
 
@@ -47,7 +51,7 @@ def test_uses_the_first_response_when_it_has_three_distinct_routes():
 
     plan = plan_trip(make_trip(), router=router)
 
-    assert plan.routes == [DIRECT, NORTH, SOUTH]
+    assert routes_of(plan) == [DIRECT, NORTH, SOUTH]
     assert plan.notes == []
     assert len(router.calls) == 1
     assert router.calls[0]["max_alternatives"] == 3
@@ -59,7 +63,7 @@ def test_asks_for_detours_when_too_few_distinct_routes():
 
     plan = plan_trip(make_trip(), router=router)
 
-    assert plan.routes == [DIRECT, NORTH, SOUTH]
+    assert routes_of(plan) == [DIRECT, NORTH, SOUTH]
     assert len(router.calls) == 3
     first_detour, second_detour = router.calls[1], router.calls[2]
     assert first_detour["max_alternatives"] == 0
@@ -73,7 +77,7 @@ def test_keeps_going_when_a_detour_is_impossible_and_notes_the_shortfall():
 
     plan = plan_trip(make_trip(), router=router)
 
-    assert plan.routes == [DIRECT]
+    assert routes_of(plan) == [DIRECT]
     assert plan.notes == ["Only 1 distinct truck route exists for this trip."]
 
 
@@ -108,3 +112,13 @@ def test_sends_a_standard_semi_with_the_trip_weight():
     vehicle = router.calls[0]["vehicle"]
     assert round(vehicle.weight_kg) == 29_484
     assert vehicle.height_m == 4.11
+
+
+def test_each_route_gets_checkpoints_from_the_trip_departure():
+    trip = make_trip()
+    plan = plan_trip(trip, router=FakeRouter([DIRECT, NORTH, SOUTH]))
+
+    timeline = plan.routes[0].timeline
+    assert timeline.checkpoints[0].eta == trip.departure_utc
+    assert timeline.checkpoints[1].mile == 10
+    assert timeline.arrival == trip.departure_utc + timedelta(hours=4)

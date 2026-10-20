@@ -89,3 +89,7 @@
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+.route-card__arrival {
+  font-size: 0.85rem;
+}

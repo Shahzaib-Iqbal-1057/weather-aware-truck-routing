@@ -6,6 +6,20 @@ export function formatDuration(seconds: number): string {
   return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`
 }
 
+/** A moment shown on the clock of `timeZone`, e.g. "Tue 6:50 AM CDT". */
+export function formatClock(utc: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).formatToParts(new Date(utc))
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? ''
+  return `${part('weekday')} ${part('hour')}:${part('minute')} ${part('dayPeriod')} ${part('timeZoneName')}`
+}
+
 export function formatMiles(miles: number): string {
   return `${Math.round(miles).toLocaleString('en-US')} mi`
 }

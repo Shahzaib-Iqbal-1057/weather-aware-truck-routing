@@ -39,20 +39,43 @@ export interface Trip {
 
 export type RouteId = 'A' | 'B' | 'C'
 
+export interface Checkpoint {
+  /** [lon, lat] */
+  position: [number, number]
+  mile: number
+  eta_utc: string
+}
+
+export interface RestStop {
+  /** "break" is 30 minutes after 8 h of driving; "rest" is 10 hours after 11 h. */
+  kind: 'break' | 'rest'
+  /** [lon, lat] */
+  position: [number, number]
+  mile: number
+  starts_utc: string
+  ends_utc: string
+}
+
 export interface RouteResult {
   id: RouteId
   distance_mi: number
-  travel_time_s: number
+  driving_time_s: number
+  /** Door to door, including rest stops. */
+  trip_time_s: number
+  arrival_utc: string
   traffic_delay_s: number
   /** Simplified display line, [lon, lat] pairs. */
   geometry: [number, number][]
   /** [lon, lat] for the map label, on road no other route uses. */
   label_position: [number, number]
+  /** Every 10 miles from the start, plus the destination. */
+  checkpoints: Checkpoint[]
+  rest_stops: RestStop[]
 }
 
 export interface TripPlanResponse {
   trip: Trip
-  /** Ordered by travel time; the first is the fastest. */
+  /** Fastest first (earliest arrival). */
   routes: RouteResult[]
   notes: string[]
   warnings: string[]

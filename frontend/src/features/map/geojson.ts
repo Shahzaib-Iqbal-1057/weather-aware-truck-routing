@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
 import type { Place, RouteId, RouteResult } from '../../api/types'
+import { formatClock, formatDuration } from '../../lib/format'
 
 export interface RouteProperties {
   id: RouteId
@@ -66,4 +67,54 @@ export function routesBounds(routes: RouteResult[]): [[number, number], [number,
         [east, north],
       ]
     : null
+}
+
+export interface PointLabelProperties {
+  /** Shown when the point is hovered or tapped. */
+  label: string
+}
+
+export interface RestStopProperties extends PointLabelProperties {
+  kind: 'break' | 'rest'
+}
+
+/** The selected route's checkpoints, labelled "Mile 120 · Mon 9:45 AM CDT". */
+export function checkpointFeatures(
+  route: RouteResult | null,
+  timeZone: string,
+): FeatureCollection<Point, PointLabelProperties> {
+  return {
+    type: 'FeatureCollection',
+    features: (route?.checkpoints ?? []).map((checkpoint) => ({
+      type: 'Feature',
+      properties: {
+        label: `Mile ${Math.round(checkpoint.mile)} · ${formatClock(checkpoint.eta_utc, timeZone)}`,
+      },
+      geometry: { type: 'Point', coordinates: checkpoint.position },
+    })),
+  }
+}
+
+/** The selected route's required driver stops, labelled with their kind and times. */
+export function restStopFeatures(
+  route: RouteResult | null,
+  timeZone: string,
+): FeatureCollection<Point, RestStopProperties> {
+  return {
+    type: 'FeatureCollection',
+    features: (route?.rest_stops ?? []).map((stop) => {
+      const duration = formatDuration(
+        (Date.parse(stop.ends_utc) - Date.parse(stop.starts_utc)) / 1000,
+      )
+      const what = stop.kind === 'rest' ? `${duration} rest` : `${duration} break`
+      return {
+        type: 'Feature',
+        properties: {
+          kind: stop.kind,
+          label: `${what} · ${formatClock(stop.starts_utc, timeZone)} – ${formatClock(stop.ends_utc, timeZone)}`,
+        },
+        geometry: { type: 'Point', coordinates: stop.position },
+      }
+    }),
+  }
 }

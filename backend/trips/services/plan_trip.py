@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from trips.domain.candidates import MAX_ROUTES, detour_boxes, select_routes
+from trips.domain.timeline import RouteTimeline, build_timeline
 from trips.domain.trip_request import TripRequest
 from trips.domain.types import Route
 from trips.domain.vehicle import standard_semi
@@ -25,9 +26,16 @@ FALLBACK_ATTEMPTS: tuple[tuple[float, ...], ...] = ((0.5,), (1 / 3, 2 / 3))
 
 
 @dataclass(frozen=True)
+class PlannedRoute:
+    route: Route
+    timeline: RouteTimeline
+
+
+@dataclass(frozen=True)
 class TripPlan:
     trip: TripRequest
-    routes: list[Route]
+    # Fastest first. More driving never means fewer rest stops, so this is also arrival order.
+    routes: list[PlannedRoute]
     notes: list[str] = field(default_factory=list)
 
 
@@ -36,13 +44,21 @@ def get_router() -> RoutingProvider:
 
 
 def plan_trip(trip: TripRequest, *, router: RoutingProvider | None = None) -> TripPlan:
-    """Stage 1: candidate routes. Raises NoRouteError if the trip cannot be driven at all."""
+    """Stages 1–2: candidate routes, then checkpoints and rest stops along each.
+
+    Raises NoRouteError if the trip cannot be driven at all.
+    """
     routes = _candidate_routes(trip, router or get_router())
+    planned = [
+        PlannedRoute(route, build_timeline(route, trip.departure_utc, trip.spacing_mi))
+        for route in routes
+    ]
+
     notes = []
     if len(routes) < MAX_ROUTES:
         noun = "route exists" if len(routes) == 1 else "routes exist"
         notes.append(f"Only {len(routes)} distinct truck {noun} for this trip.")
-    return TripPlan(trip=trip, routes=routes, notes=notes)
+    return TripPlan(trip=trip, routes=planned, notes=notes)
 
 
 def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> list[Route]:
