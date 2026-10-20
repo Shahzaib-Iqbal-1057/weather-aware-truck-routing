@@ -66,6 +66,23 @@ def select_routes(candidates: list[Route], max_routes: int = MAX_ROUTES) -> list
     return sorted(selected, key=lambda route: route.travel_time_s)
 
 
+def shortfall_reason(candidates: list[Route], selected: list[Route]) -> str:
+    """Why fewer than MAX_ROUTES were chosen, in words for the user."""
+    fastest = min(candidates, key=lambda route: route.travel_time_s)
+    time_limit = fastest.travel_time_s * (1 + MAX_STRETCH)
+    rejected = [r for r in candidates if not any(r is chosen for chosen in selected)]
+    too_slow = any(r.travel_time_s > time_limit for r in rejected)
+    too_similar = any(r.travel_time_s <= time_limit for r in rejected)
+    slower = f"more than {MAX_STRETCH:.0%} slower"
+    if too_slow and too_similar:
+        return f"the other options are {slower} or mostly use the same roads"
+    if too_slow:
+        return f"the other options are {slower}"
+    if too_similar:
+        return "the other options mostly use the same roads"
+    return "no other truck routes were found"
+
+
 def shared_fraction(route: Route, reference: Route) -> float:
     """Share of `reference`'s length that `route` also drives on (0–1)."""
     return _Footprint(route).shared_fraction(_Footprint(reference))

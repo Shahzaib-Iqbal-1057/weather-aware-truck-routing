@@ -79,7 +79,9 @@ def test_keeps_going_when_a_detour_is_impossible_and_notes_the_shortfall():
     plan = plan_trip(make_trip(), router=router)
 
     assert routes_of(plan) == [DIRECT]
-    assert plan.notes == ["Only 1 distinct truck route exists for this trip."]
+    assert plan.notes == [
+        "Only 1 distinct truck route for this trip: the other options mostly use the same roads."
+    ]
 
 
 def test_no_route_at_all_is_raised():
@@ -154,7 +156,10 @@ def test_a_failed_detour_request_keeps_the_routes_already_found():
     plan = plan_trip(make_trip(), router=router)
 
     assert routes_of(plan) == [DIRECT, NORTH]
-    assert plan.notes[0] == "Only 2 distinct truck routes exist for this trip."
+    assert plan.notes[0] == (
+        "Only 2 distinct truck routes for this trip: "
+        "the search for more routes failed, please try again shortly."
+    )
 
 
 def test_a_failed_detour_is_not_cached_so_the_next_plan_tries_again():
@@ -186,3 +191,22 @@ def test_risk_is_unknown_when_weather_is_unavailable():
         weather=FakeWeather(error=ProviderError("down")),
     )
     assert all(risk is None for planned in plan.routes for risk in planned.risk)
+
+
+def test_the_note_says_when_other_routes_were_too_slow():
+    too_slow = make_route(path(START, (37.5, -98.0), END), hours=5.5)  # +37%
+    plan = plan_trip(make_trip(), router=FakeRouter([DIRECT, too_slow], [], []))
+
+    assert plan.notes == [
+        "Only 1 distinct truck route for this trip: the other options are more than 25% slower."
+    ]
+
+
+def test_the_reason_survives_the_route_cache():
+    too_slow = make_route(path(START, (37.5, -98.0), END), hours=5.5)
+    trip = make_trip()
+    plan_trip(trip, router=FakeRouter([DIRECT, too_slow], [], []))
+
+    plan = plan_trip(trip, router=FakeRouter())  # served from cache
+
+    assert "more than 25% slower" in plan.notes[0]

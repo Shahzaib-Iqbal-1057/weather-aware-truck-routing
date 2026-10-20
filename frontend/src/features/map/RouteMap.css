@@ -48,6 +48,11 @@
   outline-offset: 2px;
 }
 
+/* Popups sit above the route bubbles (HTML markers), which would otherwise cover their text. */
+.maplibregl-popup {
+  z-index: 3;
+}
+
 /* Point labels use a line break between "where/when" and the weather. */
 .maplibregl-popup-content {
   white-space: pre-line;

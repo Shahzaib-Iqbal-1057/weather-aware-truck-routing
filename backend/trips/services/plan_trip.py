@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
-from trips.domain.candidates import MAX_ROUTES, detour_boxes, select_routes
+from trips.domain.candidates import MAX_ROUTES, detour_boxes, select_routes, shortfall_reason
 from trips.domain.risk import CheckpointRisk, classify, rounded_for_rules
 from trips.domain.timeline import RouteTimeline, build_timeline
 from trips.domain.trip_request import TripRequest
@@ -69,13 +69,13 @@ def plan_trip(
     Raises NoRouteError if the trip cannot be driven at all. If the weather service fails, the
     routes are still returned, with weather marked unavailable.
     """
-    routes = _candidate_routes(trip, router or get_router())
+    routes, shortfall = _candidate_routes(trip, router or get_router())
     timelines = [build_timeline(route, trip.departure_utc, trip.spacing_mi) for route in routes]
 
     notes = []
-    if len(routes) < MAX_ROUTES:
-        noun = "route exists" if len(routes) == 1 else "routes exist"
-        notes.append(f"Only {len(routes)} distinct truck {noun} for this trip.")
+    if shortfall:
+        noun = "route" if len(routes) == 1 else "routes"
+        notes.append(f"Only {len(routes)} distinct truck {noun} for this trip: {shortfall}.")
 
     checkpoint_times = [(c.position, c.eta) for timeline in timelines for c in timeline.checkpoints]
     try:
@@ -99,7 +99,8 @@ def plan_trip(
     return TripPlan(trip=trip, routes=planned, weather_available=weather_available, notes=notes)
 
 
-def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> list[Route]:
+def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> tuple[list[Route], str | None]:
+    """The chosen routes, and why there are fewer than MAX_ROUTES (None if there are not)."""
     cache_key = _route_cache_key(trip)
     cached = cache.get(cache_key)
     if cached is not None:
@@ -139,10 +140,17 @@ def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> list[Route]
             break
         selected = select_routes(pool)
 
+    shortfall = None
+    if fallback_failed:
+        shortfall = "the search for more routes failed, please try again shortly"
+    elif len(selected) < MAX_ROUTES:
+        shortfall = shortfall_reason(pool, selected)
+
+    result = (selected, shortfall)
     # A transient failure should not pin a short list of routes in the cache.
     if not fallback_failed:
-        cache.set(cache_key, selected, ROUTE_CACHE_SECONDS)
-    return selected
+        cache.set(cache_key, result, ROUTE_CACHE_SECONDS)
+    return result
 
 
 def _route_cache_key(trip: TripRequest) -> str:

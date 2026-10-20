@@ -1,7 +1,13 @@
 import pytest
 
 from tests.factories import make_route, path
-from trips.domain.candidates import detour_boxes, label_points, select_routes, shared_fraction
+from trips.domain.candidates import (
+    detour_boxes,
+    label_points,
+    select_routes,
+    shared_fraction,
+    shortfall_reason,
+)
 
 START, END = (35.0, -100.0), (35.0, -96.0)  # ~225 miles east-west
 
@@ -108,3 +114,20 @@ def test_label_falls_back_to_the_midpoint_when_every_part_is_shared():
 def test_a_single_route_is_labelled_in_its_middle():
     [label] = label_points([make_route(DIRECT, 4)])
     assert label[1] == pytest.approx(-98.0, abs=0.05)
+
+
+def test_shortfall_reason_explains_what_was_filtered_out():
+    direct, north = make_route(DIRECT, 4), make_route(NORTH, 4.5)
+    slow = make_route(SOUTH, 5.5)  # more than 25% slower
+    copy = make_route([(lat + 0.001, lon) for lat, lon in DIRECT], 4.1)  # same road
+
+    assert (
+        shortfall_reason([direct, slow], [direct]) == "the other options are more than 25% slower"
+    )
+    assert (
+        shortfall_reason([direct, copy], [direct]) == "the other options mostly use the same roads"
+    )
+    assert shortfall_reason([direct, slow, copy], [direct]) == (
+        "the other options are more than 25% slower or mostly use the same roads"
+    )
+    assert shortfall_reason([direct, north], [direct, north]) == "no other truck routes were found"
