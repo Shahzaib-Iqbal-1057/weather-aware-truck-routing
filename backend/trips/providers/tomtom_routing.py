@@ -59,9 +59,12 @@ class TomTomRouter:
         if response.status_code != 200:
             _raise_for_error(response)
         try:
-            return parse_routes(response.json())
+            routes = parse_routes(response.json())
         except MALFORMED_RESPONSE_ERRORS:
             raise ProviderError("TomTom routing returned an unexpected response.") from None
+        if not routes:
+            raise ProviderError("TomTom routing returned no routes.")
+        return routes
 
 
 def _query_params(

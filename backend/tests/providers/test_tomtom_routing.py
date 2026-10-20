@@ -182,9 +182,19 @@ def test_missing_api_key_fails_clearly():
 
 @pytest.mark.parametrize(
     "payload",
-    [{"routes": [{"legs": []}]}, {"routes": [{"summary": {}, "legs": [{"points": [{}]}]}]}],
+    [
+        {"routes": [{"legs": []}]},
+        {"routes": [{"summary": {}, "legs": [{"points": [{}]}]}]},
+        ["unexpected"],  # valid JSON, wrong shape
+    ],
 )
 def test_garbled_route_responses_raise_provider_error(payload):
     session = fake_session(payload=payload)
     with pytest.raises(ProviderError, match="unexpected response"):
+        route(TomTomRouter("secret-key", session=session))
+
+
+def test_a_successful_reply_without_routes_is_a_provider_error():
+    session = fake_session(payload={"routes": []})
+    with pytest.raises(ProviderError, match="no routes"):
         route(TomTomRouter("secret-key", session=session))

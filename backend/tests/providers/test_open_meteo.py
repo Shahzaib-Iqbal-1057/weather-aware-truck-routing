@@ -146,6 +146,8 @@ def test_rejects_a_response_in_the_wrong_units():
     [
         Mock(status_code=200, json=Mock(side_effect=ValueError("not json"))),
         ok({"latitude": 35.45}),  # no hourly data
+        ok(location() | {"hourly_units": []}),  # valid JSON, wrong shape
+        ok("upstream error"),  # a bare string
     ],
 )
 def test_garbled_responses_raise_provider_error(response):

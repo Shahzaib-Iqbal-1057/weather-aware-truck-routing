@@ -117,3 +117,12 @@ def test_garbled_search_response_raises_provider_error():
     session.get.return_value = Mock(status_code=200, json=Mock(side_effect=ValueError("html")))
     with pytest.raises(ProviderError, match="unexpected response"):
         TomTomGeocoder("secret-key", session=session).search("dallas", limit=5)
+
+
+def test_wrong_shaped_search_response_raises_provider_error():
+    session = Mock()
+    session.get.return_value = Mock(
+        status_code=200, json=Mock(return_value=["not", "an", "object"])
+    )
+    with pytest.raises(ProviderError, match="unexpected response"):
+        TomTomGeocoder("secret-key", session=session).search("dallas", limit=5)

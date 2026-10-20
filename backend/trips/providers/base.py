@@ -14,9 +14,10 @@ class ProviderError(Exception):
     """
 
 
-# Raised by json parsing and by reading fields from an unexpected payload shape. Providers turn
-# these into ProviderError, so a garbled reply is handled like any other provider failure.
-MALFORMED_RESPONSE_ERRORS = (ValueError, KeyError, TypeError, IndexError)
+# Raised by json parsing and by reading fields from an unexpected payload shape (e.g. a list where
+# an object was expected, which fails on `.get`). Providers turn these into ProviderError, so a
+# garbled reply is handled like any other provider failure.
+MALFORMED_RESPONSE_ERRORS = (ValueError, KeyError, TypeError, IndexError, AttributeError)
 
 
 class NoRouteError(ProviderError):
