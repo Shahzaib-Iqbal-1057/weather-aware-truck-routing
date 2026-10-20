@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
 import type { Place, RouteId, RouteResult } from '../../api/types'
-import { formatClock, formatDuration } from '../../lib/format'
+import { formatClock, formatDuration, formatWeather } from '../../lib/format'
 
 export interface RouteProperties {
   id: RouteId
@@ -78,7 +78,7 @@ export interface RestStopProperties extends PointLabelProperties {
   kind: 'break' | 'rest'
 }
 
-/** The selected route's checkpoints, labelled "Mile 120 · Mon 9:45 AM CDT". */
+/** The selected route's checkpoints, labelled with mile, ETA and the forecast for that hour. */
 export function checkpointFeatures(
   route: RouteResult | null,
   timeZone: string,
@@ -88,7 +88,7 @@ export function checkpointFeatures(
     features: (route?.checkpoints ?? []).map((checkpoint) => ({
       type: 'Feature',
       properties: {
-        label: `Mile ${Math.round(checkpoint.mile)} · ${formatClock(checkpoint.eta_utc, timeZone)}`,
+        label: `Mile ${Math.round(checkpoint.mile)} · ${formatClock(checkpoint.eta_utc, timeZone)}\n${formatWeather(checkpoint.weather)}`,
       },
       geometry: { type: 'Point', coordinates: checkpoint.position },
     })),

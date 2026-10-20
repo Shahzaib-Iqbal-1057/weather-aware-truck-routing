@@ -45,7 +45,7 @@ class GeocodeView(APIView):
 
 
 class TripPlanView(APIView):
-    """Validate the trip, then run the pipeline (currently: candidate routes)."""
+    """Validate the trip, then run the pipeline: routes, checkpoints and ETAs, weather."""
 
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "plan"

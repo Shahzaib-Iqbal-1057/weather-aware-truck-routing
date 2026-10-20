@@ -63,14 +63,31 @@ describe('routesBounds', () => {
 })
 
 describe('checkpointFeatures', () => {
-  it('labels each checkpoint with its mile and ETA on the departure clock', () => {
+  it('labels each checkpoint with its mile, ETA on the departure clock and weather', () => {
     const route = makeRoute({
-      checkpoints: [{ position: [-96.8, 32.78], mile: 120.4, eta_utc: '2026-10-20T14:45:00Z' }],
+      checkpoints: [
+        {
+          position: [-96.8, 32.78],
+          mile: 120.4,
+          eta_utc: '2026-10-20T14:45:00Z',
+          weather: {
+            forecast_hour_utc: '2026-10-20T15:00:00Z',
+            wind_mph: 18.4,
+            gust_mph: 31.2,
+            rain_in_per_hr: 0.12,
+            snow_in_per_hr: 0,
+            temperature_f: 54,
+            conditions: 'Light rain',
+          },
+        },
+      ],
     })
 
     const [feature] = checkpointFeatures(route, 'America/Chicago').features
 
-    expect(feature.properties.label).toBe('Mile 120 · Tue 9:45 AM CDT')
+    expect(feature.properties.label).toBe(
+      'Mile 120 · Tue 9:45 AM CDT\nLight rain, 54°F · wind 18 mph (gusts 31) · rain 0.12 in/hr',
+    )
     expect(feature.geometry.coordinates).toEqual([-96.8, 32.78])
   })
 

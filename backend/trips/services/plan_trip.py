@@ -1,6 +1,7 @@
 """Runs the pipeline for one trip. Each stage is added here as it is built (see README)."""
 
 import hashlib
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -13,8 +14,12 @@ from trips.domain.timeline import RouteTimeline, build_timeline
 from trips.domain.trip_request import TripRequest
 from trips.domain.types import Route
 from trips.domain.vehicle import standard_semi
-from trips.providers.base import NoRouteError, RoutingProvider
+from trips.domain.weather import HourlyWeather
+from trips.providers.base import NoRouteError, ProviderError, RoutingProvider, WeatherProvider
 from trips.providers.tomtom_routing import TomTomRouter
+from trips.services.weather import weather_at
+
+logger = logging.getLogger(__name__)
 
 ROUTE_CACHE_SECONDS = 15 * 60
 # TomTom's response time grows with each alternative (NYC→Chicago: ~11 s for 3, ~22 s for 5).
@@ -25,10 +30,17 @@ REQUESTED_ALTERNATIVES = 3
 FALLBACK_ATTEMPTS: tuple[tuple[float, ...], ...] = ((0.5,), (1 / 3, 2 / 3))
 
 
+WEATHER_UNAVAILABLE_NOTE = (
+    "Weather is unavailable right now, so weather risk can't be assessed for these routes."
+)
+
+
 @dataclass(frozen=True)
 class PlannedRoute:
     route: Route
     timeline: RouteTimeline
+    # Forecast at each checkpoint's ETA, aligned with timeline.checkpoints. None = unknown.
+    weather: list[HourlyWeather | None]
 
 
 @dataclass(frozen=True)
@@ -36,6 +48,7 @@ class TripPlan:
     trip: TripRequest
     # Fastest first. More driving never means fewer rest stops, so this is also arrival order.
     routes: list[PlannedRoute]
+    weather_available: bool = True
     notes: list[str] = field(default_factory=list)
 
 
@@ -43,22 +56,41 @@ def get_router() -> RoutingProvider:
     return TomTomRouter(settings.TOMTOM_API_KEY)
 
 
-def plan_trip(trip: TripRequest, *, router: RoutingProvider | None = None) -> TripPlan:
-    """Stages 1–2: candidate routes, then checkpoints and rest stops along each.
+def plan_trip(
+    trip: TripRequest,
+    *,
+    router: RoutingProvider | None = None,
+    weather: WeatherProvider | None = None,
+) -> TripPlan:
+    """Stages 1–3: candidate routes, checkpoints and rest stops, then weather at each checkpoint.
 
-    Raises NoRouteError if the trip cannot be driven at all.
+    Raises NoRouteError if the trip cannot be driven at all. If the weather service fails, the
+    routes are still returned, with weather marked unavailable.
     """
     routes = _candidate_routes(trip, router or get_router())
-    planned = [
-        PlannedRoute(route, build_timeline(route, trip.departure_utc, trip.spacing_mi))
-        for route in routes
-    ]
+    timelines = [build_timeline(route, trip.departure_utc, trip.spacing_mi) for route in routes]
 
     notes = []
     if len(routes) < MAX_ROUTES:
         noun = "route exists" if len(routes) == 1 else "routes exist"
         notes.append(f"Only {len(routes)} distinct truck {noun} for this trip.")
-    return TripPlan(trip=trip, routes=planned, notes=notes)
+
+    stops = [(c.position, c.eta) for timeline in timelines for c in timeline.checkpoints]
+    try:
+        forecasts = weather_at(stops, provider=weather)
+        weather_available = True
+    except ProviderError:
+        logger.exception("Weather lookup failed")
+        forecasts = [None] * len(stops)
+        weather_available = False
+        notes.append(WEATHER_UNAVAILABLE_NOTE)
+
+    planned, start = [], 0
+    for route, timeline in zip(routes, timelines, strict=True):
+        end = start + len(timeline.checkpoints)
+        planned.append(PlannedRoute(route, timeline, forecasts[start:end]))
+        start = end
+    return TripPlan(trip=trip, routes=planned, weather_available=weather_available, notes=notes)
 
 
 def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> list[Route]:

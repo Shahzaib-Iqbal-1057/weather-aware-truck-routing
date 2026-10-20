@@ -3,10 +3,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from django.utils import timezone
 
+from tests.conftest import FakeWeather
 from tests.factories import make_route, path
 from trips.domain.trip_request import TripRequest
 from trips.domain.types import Place
-from trips.providers.base import NoRouteError
+from trips.providers.base import NoRouteError, ProviderError
 from trips.services.plan_trip import plan_trip
 
 START, END = (35.0, -100.0), (35.0, -96.0)
@@ -122,3 +123,26 @@ def test_each_route_gets_checkpoints_from_the_trip_departure():
     assert timeline.checkpoints[0].eta == trip.departure_utc
     assert timeline.checkpoints[1].mile == 10
     assert timeline.arrival == trip.departure_utc + timedelta(hours=4)
+
+
+def test_every_checkpoint_gets_the_forecast_for_its_eta():
+    plan = plan_trip(make_trip(), router=FakeRouter([DIRECT, NORTH, SOUTH]))
+
+    assert plan.weather_available
+    for planned in plan.routes:
+        assert len(planned.weather) == len(planned.timeline.checkpoints)
+        for checkpoint, weather in zip(planned.timeline.checkpoints, planned.weather, strict=True):
+            assert weather.hour - timedelta(hours=1) < checkpoint.eta <= weather.hour
+
+
+def test_routes_are_still_returned_when_weather_fails():
+    plan = plan_trip(
+        make_trip(),
+        router=FakeRouter([DIRECT, NORTH, SOUTH]),
+        weather=FakeWeather(error=ProviderError("down")),
+    )
+
+    assert routes_of(plan) == [DIRECT, NORTH, SOUTH]
+    assert not plan.weather_available
+    assert all(w is None for planned in plan.routes for w in planned.weather)
+    assert any("Weather is unavailable" in note for note in plan.notes)

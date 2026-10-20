@@ -12,6 +12,7 @@ from trips.domain.trip_request import (
     build_trip_request,
 )
 from trips.domain.types import Place, PlaceKind
+from trips.domain.weather import HourlyWeather, describe_conditions
 from trips.services.plan_trip import PlannedRoute, TripPlan
 
 
@@ -98,6 +99,7 @@ def serialize_plan(plan: TripPlan, warnings: list[str]) -> dict:
             _serialize_route(chr(ord("A") + i), planned, label)
             for i, (planned, label) in enumerate(zip(plan.routes, labels, strict=True))
         ],
+        "weather_available": plan.weather_available,
         "notes": plan.notes,
         "warnings": warnings,
     }
@@ -116,8 +118,13 @@ def _serialize_route(route_id: str, planned: PlannedRoute, label: LatLon) -> dic
         # Where to put the route's map label: on road no other route shares.
         "label_position": _lon_lat(label),
         "checkpoints": [
-            {"position": _lon_lat(c.position), "mile": round(c.mile, 1), "eta_utc": _utc(c.eta)}
-            for c in timeline.checkpoints
+            {
+                "position": _lon_lat(checkpoint.position),
+                "mile": round(checkpoint.mile, 1),
+                "eta_utc": _utc(checkpoint.eta),
+                "weather": _serialize_weather(weather),
+            }
+            for checkpoint, weather in zip(timeline.checkpoints, planned.weather, strict=True)
         ],
         "rest_stops": [
             {
@@ -129,6 +136,22 @@ def _serialize_route(route_id: str, planned: PlannedRoute, label: LatLon) -> dic
             }
             for stop in timeline.stops
         ],
+    }
+
+
+def _serialize_weather(weather: HourlyWeather | None) -> dict | None:
+    if weather is None:
+        return None
+    return {
+        "forecast_hour_utc": _utc(weather.hour),
+        "wind_mph": round(weather.wind_mph, 1),
+        "gust_mph": round(weather.gust_mph, 1) if weather.gust_mph is not None else None,
+        "rain_in_per_hr": round(weather.rain_in_per_hr, 3),
+        "snow_in_per_hr": round(weather.snow_in_per_hr, 3),
+        "temperature_f": round(weather.temperature_f)
+        if weather.temperature_f is not None
+        else None,
+        "conditions": describe_conditions(weather.weather_code),
     }
 
 

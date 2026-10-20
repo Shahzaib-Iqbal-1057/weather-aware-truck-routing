@@ -64,7 +64,7 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 |---|---|---|
 | GET | `/api/health/` | Liveness check |
 | GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
-| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs and required driver stops (routes cached 15 min, rate limited). Later stages add weather and risk. |
+| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops and the forecast at every checkpoint (routes cached 15 min, weather 30 min, rate limited). Later stages add risk and the recommendation. |
 
 ## How candidate routes are chosen
 
@@ -123,6 +123,31 @@ requires and says so on the route card, rather than quietly ignoring a few minut
 
 **Times are shown on the departure city's clock** (e.g. "6:50 AM CDT") so a trip that crosses time
 zones reads on one consistent clock.
+
+## Weather at each checkpoint
+
+Forecasts come from [Open-Meteo](https://open-meteo.com) (free, no key; it picks the best model
+for each place, which in the US is NOAA's ~3 km HRRR for the near term and coarser global models
+further out).
+
+- **Matched to the hour the truck is there.** Each hourly record holds the hour before it, so a
+  truck at a checkpoint at 9:40 uses the 10:00 record (rain and snow for 9:00–10:00, wind at
+  10:00). Values are not interpolated between hours: hourly totals cannot be split meaningfully,
+  and it would suggest more precision than the forecast has.
+- **Units match the risk table:** wind in mph, rain and snow in inches per hour.
+- **Rain = rain + showers.** Open-Meteo reports steady (stratiform) rain and convective showers
+  separately; both fall on the road, and thunderstorm showers are where the dangerous rates come
+  from, so they are added, not averaged.
+- **Wind = sustained wind at 10 m** for the risk rules; gusts are shown for information.
+- **Missing data is unknown, never calm.** An hour with any missing risk value is treated as "no
+  forecast" for that checkpoint.
+- **Fewer requests:** checkpoints are snapped to a 0.05° (~5 km) grid, so checkpoints of different
+  routes on the same road share one lookup; requests are batched (100 locations each), cover only
+  the hours the trip needs, and each grid point's forecast is cached for 30 minutes.
+- **If the weather service fails,** the routes and ETAs are still shown with a clear note that
+  weather risk can't be assessed — never a silent "all clear".
+- An optional `OPEN_METEO_API_KEY` switches to Open-Meteo's paid endpoint (no rate limits) without
+  code changes.
 
 ## Assumptions
 

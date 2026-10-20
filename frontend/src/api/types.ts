@@ -39,11 +39,27 @@ export interface Trip {
 
 export type RouteId = 'A' | 'B' | 'C'
 
+/** Forecast for the hour the truck reaches a checkpoint. */
+export interface CheckpointWeather {
+  /** End of the forecast hour; rain and snow are totals for the hour before it. */
+  forecast_hour_utc: string
+  /** Sustained wind, used by the risk rules. */
+  wind_mph: number
+  gust_mph: number | null
+  /** Rain plus showers. */
+  rain_in_per_hr: number
+  snow_in_per_hr: number
+  temperature_f: number | null
+  conditions: string | null
+}
+
 export interface Checkpoint {
   /** [lon, lat] */
   position: [number, number]
   mile: number
   eta_utc: string
+  /** null when no forecast is available for this place and hour. */
+  weather: CheckpointWeather | null
 }
 
 export interface RestStop {
@@ -77,6 +93,8 @@ export interface TripPlanResponse {
   trip: Trip
   /** Fastest first (earliest arrival). */
   routes: RouteResult[]
+  /** False when the weather service failed; routes are still shown. */
+  weather_available: boolean
   notes: string[]
   warnings: string[]
 }

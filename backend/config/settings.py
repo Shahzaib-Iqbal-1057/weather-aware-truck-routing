@@ -39,7 +39,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES: dict = {}
 
 CACHES = {
-    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        # Django's default of 300 entries is too small: a long trip caches ~250 weather grid points.
+        "OPTIONS": {"MAX_ENTRIES": 20_000},
+    },
 }
 
 REST_FRAMEWORK = {
@@ -60,3 +64,5 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # External provider keys.
 TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "")
+# Optional: a paid Open-Meteo plan key. Empty means the free, keyless endpoint.
+OPEN_METEO_API_KEY = os.environ.get("OPEN_METEO_API_KEY", "")

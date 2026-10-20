@@ -6,9 +6,11 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from tests.conftest import FakeWeather
 from tests.factories import make_route, path
 from trips.providers.base import NoRouteError, ProviderError
 from trips.services import plan_trip
+from trips.services import weather as weather_service
 
 DENVER = {"label": "Denver, CO", "lat": 39.7392, "lon": -104.9903, "kind": "city"}
 DALLAS = {"label": "Dallas, TX", "lat": 32.7767, "lon": -96.7970, "kind": "city"}
@@ -157,3 +159,33 @@ def test_routes_include_checkpoints_rest_stops_and_arrival():
     assert route["checkpoints"][-1]["eta_utc"] == route["arrival_utc"]
     stop = route["rest_stops"][1]
     assert set(stop) == {"kind", "position", "mile", "starts_utc", "ends_utc"}
+
+
+def test_checkpoints_include_weather_for_their_hour():
+    body = post().json()
+
+    assert body["weather_available"] is True
+    weather = body["routes"][0]["checkpoints"][1]["weather"]
+    assert weather == {
+        "forecast_hour_utc": weather["forecast_hour_utc"],
+        "wind_mph": 8.0,
+        "gust_mph": 15.0,
+        "rain_in_per_hr": 0.0,
+        "snow_in_per_hr": 0.0,
+        "temperature_f": 60,
+        "conditions": "Clear",
+    }
+
+
+def test_weather_outage_still_returns_routes(monkeypatch):
+    failing = FakeWeather(error=ProviderError("down"))
+    monkeypatch.setattr(weather_service, "get_weather_provider", lambda: failing)
+
+    response = post()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["weather_available"] is False
+    assert len(body["routes"]) == 3
+    assert body["routes"][0]["checkpoints"][0]["weather"] is None
+    assert any("Weather is unavailable" in note for note in body["notes"])
