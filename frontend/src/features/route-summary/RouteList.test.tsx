@@ -4,8 +4,22 @@ import type { RouteResult } from '../../api/types'
 import { RouteList } from './RouteList'
 
 const ROUTES: RouteResult[] = [
-  { id: 'A', distance_mi: 882.3, travel_time_s: 12 * 3600, traffic_delay_s: 720, geometry: [] },
-  { id: 'B', distance_mi: 799.6, travel_time_s: 12.5 * 3600, traffic_delay_s: 0, geometry: [] },
+  {
+    id: 'A',
+    distance_mi: 882.3,
+    travel_time_s: 12 * 3600,
+    traffic_delay_s: 720,
+    geometry: [],
+    label_position: [0, 0],
+  },
+  {
+    id: 'B',
+    distance_mi: 799.6,
+    travel_time_s: 12.5 * 3600,
+    traffic_delay_s: 0,
+    geometry: [],
+    label_position: [0, 0],
+  },
 ]
 
 describe('RouteList', () => {

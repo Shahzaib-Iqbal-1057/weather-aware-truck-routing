@@ -1,5 +1,6 @@
 import {
   Map as MapLibreMap,
+  Marker,
   NavigationControl,
   setWorkerUrl,
   type ExpressionSpecification,
@@ -10,6 +11,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { useEffect, useRef, useState } from 'react'
 import type { Place, RouteId, RouteResult } from '../../api/types'
 import { endpointFeatures, routeFeatures, routesBounds } from './geojson'
+import { createRouteBubble } from './routeBubble'
 import {
   BASE_MAP_STYLE,
   CONTINENTAL_US_CENTER,
@@ -39,8 +41,6 @@ const ENDPOINTS_SOURCE = 'endpoints'
 const ROUTE_LINE_LAYER = 'route-line'
 // Draw the selected route above the others.
 const SELECTED_FIRST: ExpressionSpecification = ['case', ['get', 'selected'], 1, 0]
-// Labels: a lower sort key wins placement, so the selected route's letters win collisions.
-const SELECTED_LABEL_FIRST: ExpressionSpecification = ['case', ['get', 'selected'], 0, 1]
 
 export function RouteMap({
   routes,
@@ -94,6 +94,20 @@ export function RouteMap({
     map.getSource<GeoJSONSource>(ROUTES_SOURCE)?.setData(routeFeatures(routes, selectedId))
   }, [isReady, routes, selectedId])
 
+  // One clickable bubble per route ("A · 12 h 30 min"), on road no other route uses.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isReady) return
+    const markers = routes.map((route) =>
+      new Marker({
+        element: createRouteBubble(route, route.id === selectedId, (id) => onSelectRef.current(id)),
+      })
+        .setLngLat(route.label_position)
+        .addTo(map),
+    )
+    return () => markers.forEach((marker) => marker.remove())
+  }, [isReady, routes, selectedId])
+
   useEffect(() => {
     const map = mapRef.current
     if (!map || !isReady) return
@@ -140,22 +154,6 @@ function addRouteLayers(map: MapLibreMap) {
       'line-color': ['case', ['get', 'selected'], ROUTE_SELECTED_COLOR, ROUTE_ALTERNATIVE_COLOR],
       'line-width': ['case', ['get', 'selected'], 5, 3.5],
     },
-  })
-  map.addLayer({
-    id: 'route-label',
-    type: 'symbol',
-    source: ROUTES_SOURCE,
-    layout: {
-      // Repeat the letter along the line so each route stays identifiable at any zoom.
-      'symbol-placement': 'line',
-      'symbol-spacing': 300,
-      'symbol-sort-key': SELECTED_LABEL_FIRST,
-      'text-field': ['get', 'id'],
-      'text-font': ['Noto Sans Bold'],
-      'text-size': 14,
-      'text-keep-upright': true,
-    },
-    paint: { 'text-color': INK_COLOR, 'text-halo-color': ROUTE_CASING_COLOR, 'text-halo-width': 2 },
   })
   map.addLayer({
     id: 'endpoints',

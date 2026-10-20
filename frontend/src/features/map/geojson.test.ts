@@ -12,6 +12,7 @@ const ROUTES: RouteResult[] = [
       [-105, 39.7],
       [-104.8, 38.8],
     ],
+    label_position: [-104.9, 39.2],
   },
   {
     id: 'B',
@@ -23,6 +24,7 @@ const ROUTES: RouteResult[] = [
       [-105.2, 39.0],
       [-104.8, 38.8],
     ],
+    label_position: [-105.2, 39.0],
   },
 ]
 

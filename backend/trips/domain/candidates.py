@@ -71,6 +71,30 @@ def shared_fraction(route: Route, reference: Route) -> float:
     return _Footprint(route).shared_fraction(_Footprint(reference))
 
 
+def label_points(routes: list[Route]) -> list[LatLon]:
+    """Where to label each route on the map: the middle of its longest stretch of road that no
+    other route uses, so labels never sit where routes overlap. Falls back to the route's midpoint.
+    """
+    footprints = [_Footprint(route) for route in routes]
+    points = []
+    for route, footprint in zip(routes, footprints, strict=True):
+        others = [other for other in footprints if other is not footprint]
+        best_start, best_length, run_start = 0, 0, None
+        for index, sample in enumerate(footprint.samples):
+            if any(_cell(sample) in other.cells for other in others):
+                run_start = None
+                continue
+            if run_start is None:
+                run_start = index
+            if index - run_start + 1 > best_length:
+                best_start, best_length = run_start, index - run_start + 1
+        if best_length:
+            points.append(footprint.samples[best_start + best_length // 2])
+        else:
+            points.append(point_at_distance(route, route.length_m / 2))
+    return points
+
+
 def detour_boxes(routes: list[Route], at_fractions: tuple[float, ...]) -> list[BoundingBox]:
     """Boxes on each route (at the given fractions of its length) for the router to avoid.
 

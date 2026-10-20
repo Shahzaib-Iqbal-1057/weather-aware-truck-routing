@@ -118,6 +118,9 @@ def test_returns_routes_labelled_by_travel_time():
     assert first["distance_mi"] == pytest.approx(FAST.length_m / 1609.344, abs=0.1)
     # Display geometry is [lon, lat] and simplified (a straight line needs only its ends).
     assert first["geometry"] == [[-104.99, 39.74], [-96.8, 32.78]]
+    # Each route is labelled on its own road, away from the others.
+    assert [r["label_position"] for r in routes] != [routes[0]["label_position"]] * 3
+    assert all(len(r["label_position"]) == 2 for r in routes)
     assert response.json()["notes"] == []
 
 

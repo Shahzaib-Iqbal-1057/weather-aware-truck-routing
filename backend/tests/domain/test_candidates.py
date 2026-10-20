@@ -1,7 +1,7 @@
 import pytest
 
 from tests.factories import make_route, path
-from trips.domain.candidates import detour_boxes, select_routes, shared_fraction
+from trips.domain.candidates import detour_boxes, label_points, select_routes, shared_fraction
 
 START, END = (35.0, -100.0), (35.0, -96.0)  # ~225 miles east-west
 
@@ -82,3 +82,29 @@ def test_detour_box_is_smaller_on_short_routes_and_skipped_if_it_would_cover_an_
 
     assert detour_boxes([short], at_fractions=(0.1,)) == []
     assert len(detour_boxes([short], at_fractions=(0.5,))) == 1
+
+
+def test_labels_sit_on_road_only_that_route_uses():
+    direct, partial = make_route(DIRECT, 4), make_route(PARTIAL, 4.3)
+
+    direct_label, partial_label = label_points([direct, partial])
+
+    # PARTIAL shares DIRECT's first and last thirds, so both labels belong in the middle third,
+    # each on its own road: DIRECT along lat 35.0, PARTIAL up on its northern detour.
+    assert -98.7 < direct_label[1] < -97.3
+    assert direct_label[0] == pytest.approx(35.0, abs=0.01)
+    assert partial_label[0] > 35.2
+
+
+def test_label_falls_back_to_the_midpoint_when_every_part_is_shared():
+    direct = make_route(DIRECT, 4)
+    duplicate = make_route([(lat + 0.001, lon) for lat, lon in DIRECT], 4.1)
+
+    label, _ = label_points([direct, duplicate])
+
+    assert label[1] == pytest.approx(-98.0, abs=0.05)
+
+
+def test_a_single_route_is_labelled_in_its_middle():
+    [label] = label_points([make_route(DIRECT, 4)])
+    assert label[1] == pytest.approx(-98.0, abs=0.05)

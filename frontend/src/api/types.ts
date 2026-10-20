@@ -46,6 +46,8 @@ export interface RouteResult {
   traffic_delay_s: number
   /** Simplified display line, [lon, lat] pairs. */
   geometry: [number, number][]
+  /** [lon, lat] for the map label, on road no other route uses. */
+  label_position: [number, number]
 }
 
 export interface TripPlanResponse {

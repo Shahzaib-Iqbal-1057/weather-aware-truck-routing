@@ -3,6 +3,7 @@ from datetime import datetime
 from django.utils import timezone
 from rest_framework import serializers
 
+from trips.domain.candidates import label_points
 from trips.domain.geo import simplify
 from trips.domain.trip_request import (
     DEFAULT_SPACING_MI,
@@ -93,6 +94,7 @@ class RouteSerializer(serializers.Serializer):
 
     def to_representation(self, route: Route) -> dict:
         index = self.context["index"][id(route)]
+        label_lat, label_lon = self.context["labels"][id(route)]
         return {
             "id": chr(ord("A") + index),
             "distance_mi": round(route.length_m / METERS_PER_MILE, 1),
@@ -103,14 +105,21 @@ class RouteSerializer(serializers.Serializer):
                 [round(lon, 5), round(lat, 5)]
                 for lat, lon in simplify(route.points, DISPLAY_TOLERANCE_M)
             ],
+            # Where to put the route's map label: on road no other route shares.
+            "label_position": [round(label_lon, 5), round(label_lat, 5)],
         }
 
 
 def serialize_plan(plan: TripPlan, warnings: list[str]) -> dict:
     index = {id(route): i for i, route in enumerate(plan.routes)}
+    labels = {
+        id(route): point
+        for route, point in zip(plan.routes, label_points(plan.routes), strict=True)
+    }
+    context = {"index": index, "labels": labels}
     return {
         "trip": TripSerializer(plan.trip).data,
-        "routes": RouteSerializer(plan.routes, many=True, context={"index": index}).data,
+        "routes": RouteSerializer(plan.routes, many=True, context=context).data,
         "notes": plan.notes,
         "warnings": warnings,
     }
