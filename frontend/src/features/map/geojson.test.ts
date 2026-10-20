@@ -6,6 +6,7 @@ import {
   checkpointLabel,
   endpointFeatures,
   restStopFeatures,
+  riskStretchFeatures,
   routeFeatures,
   routesBounds,
 } from './geojson'
@@ -38,6 +39,30 @@ describe('routeFeatures', () => {
       { id: 'B', selected: true },
     ])
     expect(collection.features[1].geometry.coordinates).toEqual(ROUTES[1].geometry)
+  })
+})
+
+describe('riskStretchFeatures', () => {
+  it("draws every route's risky stretches, marking the selected route", () => {
+    const geometry: [number, number][] = [
+      [-105, 39.5],
+      [-105, 39.2],
+    ]
+    const routes = [
+      makeRoute({ id: 'A', risk_stretches: [{ level: 'high', from_mi: 10, to_mi: 30, geometry }] }),
+      makeRoute({
+        id: 'B',
+        risk_stretches: [{ level: 'severe', from_mi: 0, to_mi: 5, geometry }],
+      }),
+    ]
+
+    const collection = riskStretchFeatures(routes, 'B')
+
+    expect(collection.features.map((f) => f.properties)).toEqual([
+      { id: 'A', selected: false, level: 'high' },
+      { id: 'B', selected: true, level: 'severe' },
+    ])
+    expect(collection.features[0].geometry.coordinates).toEqual(geometry)
   })
 })
 
@@ -96,6 +121,23 @@ describe('checkpointFeatures', () => {
 
   it('is empty when no route is selected', () => {
     expect(checkpointFeatures(null, 'UTC').features).toEqual([])
+  })
+
+  it('keeps the ends, every fifth Low checkpoint and anything riskier when zoomed out', () => {
+    const levels = ['low', 'low', 'moderate', 'low', 'low', 'low', 'low', 'low'] as const
+    const route = makeRoute({
+      checkpoints: levels.map((level, i) => ({
+        position: [-100, 35 + i / 10],
+        mile: i * 10,
+        eta_utc: '2026-10-20T14:00:00Z',
+        weather: null,
+        risk: { level, reasons: [] },
+      })),
+    })
+
+    const kept = checkpointFeatures(route, 'UTC').features.map((f) => f.properties.keepZoomedOut)
+
+    expect(kept).toEqual([true, false, true, false, false, true, false, true])
   })
 })
 

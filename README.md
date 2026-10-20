@@ -65,7 +65,7 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 | GET | `/api/health/` | Liveness check |
 | GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
 | POST | `/api/trips/heatmap/` | Weather map for a planned trip (same body as the plan): risk level in every corridor cell for each of the 48 hours after departure. Requested separately so the routes never wait for it. |
-| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops, the forecast and risk level at every checkpoint, per-route risk totals and the recommended route with its reason (routes cached 15 min, weather 30 min, rate limited). |
+| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops, the forecast and risk level at every checkpoint, per-route risk totals, the Moderate-or-worse stretches of each route for the map, and the recommended route with its reason (routes cached 15 min, weather 30 min, rate limited). |
 
 ## How candidate routes are chosen
 
@@ -233,6 +233,31 @@ checkpoint spacing rather than being tuned by hand. Travel time stays balanced a
 two ways: routes more than 25% slower than the fastest are never candidates (see route selection),
 and when the weather is practically the same, the fastest route wins.
 
+## Reading the map
+
+- **Routes:** the selected route is blue and the alternatives gray, each with a label showing its
+  door-to-door time. Click a line, its label or its card to select it.
+- **Risk on every route, not just the selected one.** Road at Moderate or worse is drawn in the
+  risk colours *inside* the route's own line, so a stormy stretch on an alternative is visible
+  without selecting it, and the blue or gray edge still says which route it belongs to. Each
+  checkpoint covers the road halfway to its neighbours, and neighbouring checkpoints at the same
+  level merge into one stretch; Low road stays a plain line, so the map isn't washed in green.
+- **Checkpoint dots** on the selected route show the level at each 10-mile mark; hover or tap one
+  for its ETA, weather and the rule that set the level. Zoomed out, 10-mile dots would overlap, so
+  only every fifth Low dot is drawn (anything above Low always is).
+- **Checkpoint details:** the same information as a table under the route list (with the driver's
+  required stops in between), filterable to the checkpoints above Low. It works without a mouse,
+  with a screen reader, and is quicker to scan than hovering dots.
+- After planning, the form folds into a one-line trip summary ("Change trip" opens it again), so
+  the recommendation and routes come first. On phones the map sits on top and the planner scrolls
+  below it.
+- Accessibility: every colour is named in the legend, the popups and the table; controls work by
+  keyboard; focus moves to the results after planning; the slider's live status is quiet while it
+  plays; map camera moves respect reduced-motion settings. Lighthouse (production build) scores
+  100 for accessibility and best practices. Performance is 70 desktop / 83 mobile: almost all of
+  the blocking time is MapLibre starting WebGL, which Lighthouse's headless Chrome renders in
+  software; the planner itself loads first because the map is a separate, lazily loaded chunk.
+
 ## Weather map (0–48 h)
 
 A colored layer around the routes shows weather risk across the trip corridor, for every hour from
@@ -249,6 +274,9 @@ sits in a colored area, that is when the truck drives through it. The map also s
   trips through the same area share cached forecasts. Cells are 0.25° (~25 km) on shorter trips
   and coarsen to 0.5° or 1° to stay under 250 cells on long ones; storm systems that matter to
   trucks are tens to hundreds of km across.
+- **Soft cells:** each cell is drawn as a blurred disc about one cell wide, so neighbouring cells
+  blend into a radar-like field instead of a grid of squares. The forecast is still per cell; the
+  blur only hides the grid.
 - **Smooth by construction:** every cell carries all 48 hourly levels, so moving the slider only
   changes which hour the map colors by. No data is re-sent and no request is made.
 - **Loaded on demand** ("Show weather map"): it costs one weather location per cell, so trips where

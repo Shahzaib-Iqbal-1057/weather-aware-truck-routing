@@ -1,0 +1,94 @@
+.checkpoint-table {
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.checkpoint-table > summary {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checkpoint-table > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.checkpoint-table__filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 8px;
+  font-size: 0.85rem;
+}
+
+.checkpoint-table__empty {
+  margin: 0;
+  padding: 0 12px 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.checkpoint-table__scroll {
+  max-height: 360px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+
+.checkpoint-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.checkpoint-table th,
+.checkpoint-table td {
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+
+.checkpoint-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.checkpoint-table td:first-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Wed 11:43 PM PDT" may wrap, leaving the weather column room at sidebar width. */
+.checkpoint-table td:nth-child(2) {
+  min-width: 5.5em;
+}
+
+.checkpoint-table__level {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.checkpoint-table__swatch {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
+.checkpoint-table__reasons {
+  display: block;
+  color: var(--text-muted);
+}
+
+.checkpoint-table__stop td {
+  background: var(--accent-soft);
+}

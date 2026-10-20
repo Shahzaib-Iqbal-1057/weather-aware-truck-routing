@@ -7,6 +7,11 @@
   font-size: 1rem;
 }
 
+/* Focused by script only (after planning); a ring on a heading would look like a bug. */
+.route-list h2:focus {
+  outline: none;
+}
+
 .route-list ul {
   display: flex;
   flex-direction: column;

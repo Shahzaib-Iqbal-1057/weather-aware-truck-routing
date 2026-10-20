@@ -99,6 +99,15 @@ export interface Recommendation {
   reason: string
 }
 
+/** Road at Moderate or worse, merged across neighbouring checkpoints at the same level. */
+export interface RiskStretch {
+  level: Exclude<RiskLevelKey, 'low' | 'unknown'>
+  from_mi: number
+  to_mi: number
+  /** [lon, lat] pairs along the road. */
+  geometry: [number, number][]
+}
+
 export interface RouteResult {
   id: RouteId
   distance_mi: number
@@ -114,6 +123,8 @@ export interface RouteResult {
   /** Every 10 miles from the start, plus the destination. */
   checkpoints: Checkpoint[]
   rest_stops: RestStop[]
+  /** Drawn in risk colours over the route line; empty when the whole route is Low. */
+  risk_stretches: RiskStretch[]
 }
 
 export interface TripPlanResponse {

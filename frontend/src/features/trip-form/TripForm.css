@@ -4,6 +4,10 @@
   gap: 16px;
 }
 
+.trip-form[hidden] {
+  display: none;
+}
+
 .field {
   position: relative;
   display: flex;
@@ -132,27 +136,53 @@
 }
 
 .trip-summary {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.trip-summary h2 {
-  margin: 0 0 8px;
-  font-size: 1rem;
+.trip-summary__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.trip-summary dl {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 4px 12px;
-  margin: 0 0 8px;
+.trip-summary__places {
+  margin: 0;
+  font-weight: 600;
 }
 
-.trip-summary dt {
+.trip-summary__details {
+  margin: 0;
+  font-size: 0.85rem;
   color: var(--text-muted);
 }
 
-.trip-summary dd {
-  margin: 0;
+.trip-summary__edit {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.trip-summary__edit:hover {
+  border-color: var(--accent);
+}
+
+.trip-summary__edit:focus-visible,
+.trip-form__submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.trip-summary + .trip-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }

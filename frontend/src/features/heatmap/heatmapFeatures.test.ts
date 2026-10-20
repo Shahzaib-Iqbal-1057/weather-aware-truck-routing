@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HeatmapResponse } from '../../api/types'
-import { hasWeatherAt, heatmapFeatures } from './heatmapFeatures'
+import { cellRadiusStops, hasWeatherAt, heatmapFeatures } from './heatmapFeatures'
 
 const HEATMAP: HeatmapResponse = {
   start_utc: '2026-10-21T15:00:00Z',
@@ -11,15 +11,9 @@ const HEATMAP: HeatmapResponse = {
 }
 
 describe('heatmapFeatures', () => {
-  it('turns each cell into a square around its center', () => {
+  it('puts one point at each cell center', () => {
     const [cell] = heatmapFeatures(HEATMAP).features
-    expect(cell.geometry.coordinates[0]).toEqual([
-      [-111.5, 35],
-      [-111, 35],
-      [-111, 35.5],
-      [-111.5, 35.5],
-      [-111.5, 35],
-    ])
+    expect(cell.geometry.coordinates).toEqual([-111.25, 35.25])
   })
 
   it('stores every hour as a number property, -1 for no forecast', () => {
@@ -29,6 +23,19 @@ describe('heatmapFeatures', () => {
 
   it('is empty without data', () => {
     expect(heatmapFeatures(undefined).features).toEqual([])
+  })
+})
+
+describe('cellRadiusStops', () => {
+  it('is one cell tall on screen at zoom 0 and doubles with every zoom level', () => {
+    const [atZoom0, atZoom22] = cellRadiusStops(HEATMAP)
+    const cellHeightPx = (0.5 * 512) / 360 / Math.cos((35.25 * Math.PI) / 180)
+    expect(atZoom0).toBeCloseTo(cellHeightPx)
+    expect(atZoom22 / atZoom0).toBe(2 ** 22)
+  })
+
+  it('is zero without cells', () => {
+    expect(cellRadiusStops(undefined)).toEqual([0, 0])
   })
 })
 

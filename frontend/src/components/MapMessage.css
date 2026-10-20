@@ -1,0 +1,72 @@
+.map-message {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 12px 16px;
+  transform: translateX(-50%);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.16);
+  font-size: 0.9rem;
+}
+
+.map-message--busy {
+  border-radius: 999px;
+  padding: 8px 16px;
+}
+
+.map-message__title {
+  margin: 0 0 2px;
+  font-weight: 600;
+}
+
+.map-message__text {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.map-message--busy .map-message__text {
+  color: var(--text);
+}
+
+.map-message__spinner {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: map-message-spin 0.8s linear infinite;
+}
+
+@keyframes map-message-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-message__spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* Phones: clear of the zoom buttons, and a hint shrinks to its title. */
+@media (max-width: 760px) {
+  .map-message {
+    top: 10px;
+    left: 10px;
+    max-width: calc(100% - 64px);
+    transform: none;
+  }
+
+  .map-message--hint .map-message__text {
+    display: none;
+  }
+}

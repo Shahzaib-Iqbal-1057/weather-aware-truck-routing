@@ -30,6 +30,9 @@ interface TripFormProps {
   isSubmitting: boolean
   serverErrors: TripFormErrors
   generalError: string | null
+  id?: string
+  /** Folded away (but kept, with its values) once a trip is planned. */
+  hidden?: boolean
 }
 
 const DAY_MS = 24 * 3_600_000
@@ -42,7 +45,14 @@ const FIELD_KEYS: Record<TripFormField, true> = {
   cargoWeightLb: true,
 }
 
-export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }: TripFormProps) {
+export function TripForm({
+  onSubmit,
+  isSubmitting,
+  serverErrors,
+  generalError,
+  id,
+  hidden = false,
+}: TripFormProps) {
   const [values, setValues] = useState<TripFormValues>(() => {
     const timeZone = browserTimeZone()
     return {
@@ -116,7 +126,7 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
   const warning = departureWarning(values, now)
 
   return (
-    <form className="trip-form" onSubmit={handleSubmit} noValidate>
+    <form id={id} className="trip-form" onSubmit={handleSubmit} noValidate hidden={hidden}>
       <PlaceAutocomplete
         label="Origin"
         placeholder="City or address"
@@ -185,7 +195,11 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
         )}
       </div>
 
-      {generalError && <p className="trip-form__error">{generalError}</p>}
+      {generalError && (
+        <p className="trip-form__error" role="alert">
+          {generalError}
+        </p>
+      )}
 
       <button type="submit" className="trip-form__submit" disabled={isSubmitting}>
         {isSubmitting ? 'Planning…' : 'Plan trip'}

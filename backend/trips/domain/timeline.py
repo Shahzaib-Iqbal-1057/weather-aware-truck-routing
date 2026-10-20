@@ -115,6 +115,10 @@ def _at_distance(route: Route, distance_m: float) -> tuple[LatLon, float]:
     return _interpolate(route, route.distances_m, distance_m, route.times_s)
 
 
+def position_at(route: Route, distance_m: float) -> LatLon:
+    return _at_distance(route, distance_m)[0]
+
+
 def _at_driving_time(route: Route, driving_s: float) -> tuple[LatLon, float]:
     """Position and distance at a driving time along the route (linear between points)."""
     return _interpolate(route, route.times_s, driving_s, route.distances_m)

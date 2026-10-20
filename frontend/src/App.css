@@ -39,23 +39,50 @@
   position: relative;
 }
 
+/* Phones: the map on top, the planner below it as a scrolling panel. */
 @media (max-width: 760px) {
   .app {
-    height: auto;
+    height: 100dvh;
+  }
+
+  .app__header {
+    padding: 8px 12px;
+  }
+
+  .app__header h1 {
+    font-size: 1rem;
   }
 
   .app__body {
     flex-direction: column;
   }
 
-  .app__sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+  .app__map {
+    order: -1;
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 32dvh;
+    min-height: 200px;
   }
 
-  .app__map {
-    min-height: 50vh;
+  .app__map > .route-map {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Once there are routes, the map gets more room. */
+  .app--planned .app__map {
+    flex-basis: 52dvh;
+  }
+
+  .app__sidebar {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    padding: 16px;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 12px rgb(0 0 0 / 0.08);
   }
 }
 

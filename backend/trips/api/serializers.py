@@ -6,6 +6,7 @@ from rest_framework import serializers
 from trips.domain.candidates import label_points
 from trips.domain.geo import METERS_PER_MILE, LatLon, simplify
 from trips.domain.risk import CheckpointRisk, RiskLevel
+from trips.domain.risk_stretches import risk_stretches
 from trips.domain.trip_request import (
     DEFAULT_SPACING_MI,
     TripRequest,
@@ -149,6 +150,18 @@ def _serialize_route(planned: PlannedRoute, label: LatLon) -> dict:
             for checkpoint, weather, risk in zip(
                 timeline.checkpoints, planned.weather, planned.risk, strict=True
             )
+        ],
+        # Moderate-or-worse road, drawn in risk colours over the route line.
+        "risk_stretches": [
+            {
+                "level": stretch.level.key,
+                "from_mi": round(stretch.from_mi, 1),
+                "to_mi": round(stretch.to_mi, 1),
+                "geometry": [
+                    _lon_lat(point) for point in simplify(stretch.points, DISPLAY_TOLERANCE_M)
+                ],
+            }
+            for stretch in risk_stretches(route, timeline, planned.risk)
         ],
         "rest_stops": [
             {

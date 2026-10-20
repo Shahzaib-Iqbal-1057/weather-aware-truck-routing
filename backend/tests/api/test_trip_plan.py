@@ -201,6 +201,23 @@ def test_checkpoints_include_risk_level_and_reasons(monkeypatch):
     assert checkpoint["weather"]["gust_mph"] == 57.3
 
 
+def test_risky_road_is_sent_as_stretches_for_the_map(monkeypatch):
+    stormy = FakeWeather(wind_mph=20.0, gust_mph=57.3)
+    monkeypatch.setattr(weather_service, "get_weather_provider", lambda: stormy)
+
+    route = post().json()["routes"][0]
+
+    # High everywhere: one stretch from start to finish.
+    (stretch,) = route["risk_stretches"]
+    assert stretch["level"] == "high"
+    assert stretch["from_mi"] == 0 and stretch["to_mi"] == route["distance_mi"]
+    assert stretch["geometry"][0] == route["geometry"][0]
+
+
+def test_calm_routes_have_no_risk_stretches():
+    assert post().json()["routes"][0]["risk_stretches"] == []
+
+
 def test_risk_is_unknown_without_weather(monkeypatch):
     failing = FakeWeather(error=ProviderError("down"))
     monkeypatch.setattr(weather_service, "get_weather_provider", lambda: failing)

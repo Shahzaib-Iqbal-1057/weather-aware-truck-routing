@@ -91,7 +91,7 @@ export function HeatmapControl({
           }}
         />
       </div>
-      <p className="heatmap-control__status" aria-live="polite">
+      <p className="heatmap-control__status" aria-live={playing ? 'off' : 'polite'}>
         {status === 'loading' && 'Loading weather map…'}
         {status === 'busy' && 'The weather map is busy. Retrying shortly…'}
         {status === 'error' && 'The weather map is unavailable right now.'}

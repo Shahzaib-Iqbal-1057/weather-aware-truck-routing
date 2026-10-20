@@ -13,6 +13,7 @@ export function makeRoute(overrides: Partial<RouteResult> = {}): RouteResult {
     label_position: [0, 0],
     checkpoints: [],
     rest_stops: [],
+    risk_stretches: [],
     ...overrides,
   }
 }

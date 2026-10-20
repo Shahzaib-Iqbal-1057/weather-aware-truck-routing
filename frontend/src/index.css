@@ -6,7 +6,7 @@
   --border: #d9dee4;
   --accent: #0b6e99;
   --accent-soft: #e3f2f9;
-  --ok: #2f9e44;
+  --ok: #237a34;
   --warning: #9a6700;
   --warning-bg: #fff8e1;
   --error: #c92a2a;
@@ -40,4 +40,17 @@ input,
 button {
   font: inherit;
   color: inherit;
+}
+
+/* Read by screen readers, not shown. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }

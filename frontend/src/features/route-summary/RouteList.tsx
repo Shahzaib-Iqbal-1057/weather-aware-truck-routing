@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { Recommendation, RouteId, RouteResult } from '../../api/types'
 import { formatClock, formatDuration, formatMiles } from '../../lib/format'
 import './RouteList.css'
@@ -38,9 +39,15 @@ export function RouteList({
   recommendation,
 }: RouteListProps) {
   const earliest = routes[0]?.trip_time_s ?? 0
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  // A new plan mounts this list. The form (and the button that had focus) folds away at the same
+  // time, so focus moves here and keyboard and screen-reader users land on the results.
+  useEffect(() => headingRef.current?.focus(), [])
   return (
-    <section className="route-list" aria-label="Route options">
-      <h2>Routes</h2>
+    <section className="route-list" aria-labelledby="routes-heading">
+      <h2 id="routes-heading" ref={headingRef} tabIndex={-1}>
+        Routes
+      </h2>
       <p
         className={`route-list__recommendation${recommendation.route_id ? '' : ' route-list__recommendation--none'}`}
         role="status"

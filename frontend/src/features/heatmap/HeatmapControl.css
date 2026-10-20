@@ -68,9 +68,26 @@
   outline-offset: 2px;
 }
 
+/* Phones: a bar under the map instead of a card over it, clear of the map's attribution. */
 @media (max-width: 760px) {
-  .heatmap-control {
-    width: calc(100% - 24px);
-    bottom: 12px;
+  .heatmap-control,
+  .heatmap-control--off {
+    position: static;
+    width: auto;
+    padding: 8px 12px;
+    transform: none;
+    border-radius: 0;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: none;
+  }
+
+  .heatmap-control--off {
+    text-align: center;
+  }
+
+  .heatmap-control__enable {
+    box-shadow: none;
+    border: 1px solid var(--border);
   }
 }

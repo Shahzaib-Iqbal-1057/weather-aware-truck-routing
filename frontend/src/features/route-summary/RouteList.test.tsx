@@ -79,6 +79,11 @@ describe('RouteList', () => {
     expect(onSelect).toHaveBeenCalledWith('B')
   })
 
+  it('moves focus to the results when a plan arrives', () => {
+    renderList()
+    expect(screen.getByRole('heading', { name: 'Routes' })).toHaveFocus()
+  })
+
   it('shows notes such as a shortfall in distinct routes', () => {
     renderList(vi.fn(), ['Only 2 distinct truck routes exist for this trip.'])
     expect(

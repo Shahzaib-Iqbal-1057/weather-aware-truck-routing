@@ -1,11 +1,22 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
-import type { Checkpoint, Place, RiskLevelKey, RouteId, RouteResult } from '../../api/types'
+import type {
+  Checkpoint,
+  Place,
+  RiskLevelKey,
+  RiskStretch,
+  RouteId,
+  RouteResult,
+} from '../../api/types'
 import { formatClock, formatDuration, formatWeather } from '../../lib/format'
 import { riskStyle } from '../../lib/risk'
 
 export interface RouteProperties {
   id: RouteId
   selected: boolean
+}
+
+export interface RiskStretchProperties extends RouteProperties {
+  level: RiskStretch['level']
 }
 
 export interface EndpointProperties {
@@ -24,6 +35,23 @@ export function routeFeatures(
       properties: { id: route.id, selected: route.id === selectedId },
       geometry: { type: 'LineString', coordinates: route.geometry },
     })),
+  }
+}
+
+/** Every route's Moderate-or-worse stretches, so risk shows on alternatives too. */
+export function riskStretchFeatures(
+  routes: RouteResult[],
+  selectedId: RouteId | null,
+): FeatureCollection<LineString, RiskStretchProperties> {
+  return {
+    type: 'FeatureCollection',
+    features: routes.flatMap((route) =>
+      route.risk_stretches.map((stretch): Feature<LineString, RiskStretchProperties> => ({
+        type: 'Feature',
+        properties: { id: route.id, selected: route.id === selectedId, level: stretch.level },
+        geometry: { type: 'LineString', coordinates: stretch.geometry },
+      })),
+    ),
   }
 }
 
@@ -77,11 +105,16 @@ export interface PointLabelProperties {
 
 export interface CheckpointProperties extends PointLabelProperties {
   level: RiskLevelKey
+  /** Kept when zoomed out: the ends, every fifth checkpoint, and anything above Low. */
+  keepZoomedOut: boolean
 }
 
 export interface RestStopProperties extends PointLabelProperties {
   kind: 'break' | 'rest'
 }
+
+// Zoomed out, 10-mile dots overlap; only every fifth Low one is drawn (see RouteMap).
+const ZOOMED_OUT_EVERY = 5
 
 /** The selected route's checkpoints, with their risk level and a label for the popup. */
 export function checkpointFeatures(
@@ -90,9 +123,16 @@ export function checkpointFeatures(
 ): FeatureCollection<Point, CheckpointProperties> {
   return {
     type: 'FeatureCollection',
-    features: (route?.checkpoints ?? []).map((checkpoint) => ({
+    features: (route?.checkpoints ?? []).map((checkpoint, index, all) => ({
       type: 'Feature',
-      properties: { level: checkpoint.risk.level, label: checkpointLabel(checkpoint, timeZone) },
+      properties: {
+        level: checkpoint.risk.level,
+        label: checkpointLabel(checkpoint, timeZone),
+        keepZoomedOut:
+          checkpoint.risk.level !== 'low' ||
+          index % ZOOMED_OUT_EVERY === 0 ||
+          index === all.length - 1,
+      },
       geometry: { type: 'Point', coordinates: checkpoint.position },
     })),
   }
