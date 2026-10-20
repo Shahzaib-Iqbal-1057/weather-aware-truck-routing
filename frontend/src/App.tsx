@@ -1,9 +1,13 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import { ApiError } from './api/client'
+import { useHeatmap } from './api/heatmap'
 import { usePlanTrip } from './api/trips'
 import type { RouteId } from './api/types'
 import { browserTimeZone } from './lib/zonedTime'
 import { BackendStatus } from './components/BackendStatus'
+import { HeatmapControl } from './features/heatmap/HeatmapControl'
+import { hasWeatherAt } from './features/heatmap/heatmapFeatures'
+import { truckPositionAt } from './features/heatmap/truckPosition'
 import { RouteList } from './features/route-summary/RouteList'
 import { toFormErrors } from './features/trip-form/serverErrors'
 import { TripForm } from './features/trip-form/TripForm'
@@ -34,10 +38,14 @@ function describeError(error: Error | null) {
 export default function App() {
   const planTrip = usePlanTrip()
   const [selectedId, setSelectedId] = useState<RouteId | null>(null)
+  // Weather map: loaded only once the user turns it on (it costs a weather request per cell).
+  const [heatmapOn, setHeatmapOn] = useState(false)
+  const [heatmapHour, setHeatmapHour] = useState(0)
+  const onHourChange = useCallback((hour: number) => setHeatmapHour(hour), [])
 
   const plan = planTrip.data
   const routes = plan?.routes ?? []
-  // Default to the first (fastest) route until the user picks one.
+  const heatmap = useHeatmap(plan ? planTrip.variables : undefined, heatmapOn)
   // Show the recommended route until the user picks one (the fastest if nothing is recommended).
   const activeId = routes.some((route) => route.id === selectedId)
     ? selectedId
@@ -45,6 +53,20 @@ export default function App() {
   const { fields: serverErrors, general } = describeError(planTrip.error)
   // All times are shown on the departure city's clock.
   const timeZone = plan?.trip.departure_timezone ?? browserTimeZone()
+
+  const heatmapStart = heatmap.data?.start_utc ?? plan?.trip.departure_utc ?? ''
+  const activeRoute = routes.find((route) => route.id === activeId)
+  const truckPosition =
+    heatmapOn && heatmap.data && activeRoute
+      ? truckPositionAt(activeRoute, Date.parse(heatmapStart) + heatmapHour * 3_600_000)
+      : null
+  const heatmapStatus = heatmap.data
+    ? 'ready'
+    : heatmap.isError
+      ? 'error'
+      : heatmap.failureCount > 0
+        ? 'busy'
+        : 'loading'
 
   return (
     <div className="app">
@@ -57,6 +79,7 @@ export default function App() {
           <TripForm
             onSubmit={(request) => {
               setSelectedId(null)
+              setHeatmapHour(0)
               planTrip.mutate(request)
             }}
             isSubmitting={planTrip.isPending}
@@ -88,8 +111,24 @@ export default function App() {
               onSelect={setSelectedId}
               isLoading={planTrip.isPending}
               timeZone={timeZone}
+              heatmap={heatmapOn ? heatmap.data : undefined}
+              heatmapHour={heatmapHour}
+              truckPosition={truckPosition}
             />
           </Suspense>
+          {plan && (
+            <HeatmapControl
+              enabled={heatmapOn}
+              onEnable={() => setHeatmapOn(true)}
+              hour={heatmapHour}
+              onHourChange={onHourChange}
+              hours={heatmap.data?.hours ?? 48}
+              startUtc={heatmapStart}
+              timeZone={timeZone}
+              status={heatmapStatus}
+              hasWeather={hasWeatherAt(heatmap.data, heatmapHour)}
+            />
+          )}
         </main>
       </div>
     </div>

@@ -129,3 +129,20 @@ export interface TripPlanResponse {
 
 /** DRF validation error body: field name → messages (nested objects for nested serializers). */
 export type ValidationErrorBody = Record<string, string[] | Record<string, string[]>>
+
+/** One weather-map cell: its center and one character per hour ("0" Low … "4" No Travel, "-" none). */
+export interface HeatmapCell {
+  /** [lon, lat] */
+  center: [number, number]
+  levels: string
+}
+
+export interface HeatmapResponse {
+  /** The forecast hour covering the departure; hour index 0. */
+  start_utc: string
+  hours: number
+  cell_size_deg: number
+  cells_in_corridor: number
+  /** Only cells that reach Moderate or worse at some hour (Low is drawn transparent). */
+  cells: HeatmapCell[]
+}

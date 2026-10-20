@@ -1,4 +1,4 @@
-"""Stage 3: weather at each checkpoint, for the hour the truck is there."""
+"""Stage 3 (and the Stage 8 weather map): hourly forecasts for grid points, cached and budgeted."""
 
 import time
 from collections import defaultdict
@@ -12,9 +12,11 @@ from trips.domain.geo import LatLon
 from trips.domain.weather import HourlyWeather, forecast_hour, grid_point
 from trips.providers.base import WeatherProvider
 from trips.providers.open_meteo import OpenMeteoWeather
+from trips.services.weather_budget import get_budget
 
 # Forecasts update roughly hourly. Nothing older than this is ever served.
 CACHE_SECONDS = 30 * 60
+CHECKPOINT_CACHE = "weather"
 
 
 @dataclass(frozen=True)
@@ -27,9 +29,12 @@ class _CachedForecast:
     end: datetime
     records: dict[datetime, HourlyWeather]
 
+    def fresh(self, now: float) -> bool:
+        return now - self.fetched_at < CACHE_SECONDS
+
     def answers(self, hour: datetime, now: float) -> bool:
         """True if this fetch is fresh and covered `hour` (even if the hour had no data)."""
-        return now - self.fetched_at < CACHE_SECONDS and self.start <= hour <= self.end
+        return self.fresh(now) and self.start <= hour <= self.end
 
 
 def get_weather_provider() -> WeatherProvider:
@@ -48,13 +53,25 @@ def weather_at(
     hours_by_point: dict[LatLon, set[datetime]] = defaultdict(set)
     for point, hour in wanted:
         hours_by_point[point].add(hour)
+    records = hourly_records(hours_by_point, cache_name=CHECKPOINT_CACHE, provider=provider)
+    return [records[point].get(hour) for point, hour in wanted]
 
+
+def hourly_records(
+    hours_by_point: dict[LatLon, set[datetime]],
+    *,
+    cache_name: str,
+    provider: WeatherProvider | None = None,
+) -> dict[LatLon, dict[datetime, HourlyWeather]]:
+    """Hourly forecasts covering the requested hours at each point (from cache when fresh).
+
+    `cache_name` separates grids of different resolution, so their points never collide.
+    """
     now = _now()
-    cached = cache.get_many([_cache_key(point) for point in hours_by_point])
+    keys = {point: f"{cache_name}:{point[0]:.4f},{point[1]:.4f}" for point in hours_by_point}
+    cached = cache.get_many(list(keys.values()))
     forecasts: dict[LatLon, _CachedForecast] = {
-        point: entry
-        for point in hours_by_point
-        if (entry := cached.get(_cache_key(point))) is not None
+        point: entry for point, key in keys.items() if (entry := cached.get(key)) is not None
     }
 
     stale = sorted(
@@ -71,26 +88,36 @@ def weather_at(
                 *hours_by_point[point],
                 *(
                     (forecasts[point].start, forecasts[point].end)
-                    if point in forecasts and now - forecasts[point].fetched_at < CACHE_SECONDS
+                    if point in forecasts and forecasts[point].fresh(now)
                     else ()
                 ),
             )
         ]
         start, end = min(spans), max(spans)
-        fetched = (provider or get_weather_provider()).hourly(stale, start=start, end=end)
+        fetched = _fetch_within_budget(stale, start, end, provider or get_weather_provider())
         fresh = {
             point: _CachedForecast(now, start, end, {r.hour: r for r in fetched.get(point, [])})
             for point in stale
         }
-        cache.set_many({_cache_key(point): entry for point, entry in fresh.items()}, CACHE_SECONDS)
+        cache.set_many({keys[point]: entry for point, entry in fresh.items()}, CACHE_SECONDS)
         forecasts.update(fresh)
 
-    return [forecasts[point].records.get(hour) for point, hour in wanted]
+    return {point: forecasts[point].records for point in hours_by_point}
+
+
+def _fetch_within_budget(
+    points: list[LatLon], start: datetime, end: datetime, provider: WeatherProvider
+) -> dict[LatLon, list]:
+    budget = get_budget()
+    if budget is None:
+        return provider.hourly(points, start=start, end=end)
+    fetched: dict[LatLon, list] = {}
+    for i in range(0, len(points), budget.batch_limit):
+        chunk = points[i : i + budget.batch_limit]
+        budget.acquire(len(chunk))
+        fetched.update(provider.hourly(chunk, start=start, end=end))
+    return fetched
 
 
 def _now() -> float:
     return time.time()
-
-
-def _cache_key(point: LatLon) -> str:
-    return f"weather:{point[0]:.4f},{point[1]:.4f}"

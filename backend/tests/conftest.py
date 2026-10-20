@@ -50,3 +50,9 @@ def fake_weather(monkeypatch):
     fake = FakeWeather()
     monkeypatch.setattr(weather_service, "get_weather_provider", lambda: fake)
     return fake
+
+
+@pytest.fixture(autouse=True)
+def no_weather_budget(monkeypatch):
+    """Fake weather calls must not use up a real-time budget (it would make tests wait)."""
+    monkeypatch.setattr(weather_service, "get_budget", lambda: None)

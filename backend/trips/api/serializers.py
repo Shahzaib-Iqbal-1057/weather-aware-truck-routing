@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from trips.domain.candidates import label_points
 from trips.domain.geo import METERS_PER_MILE, LatLon, simplify
-from trips.domain.risk import CheckpointRisk
+from trips.domain.risk import CheckpointRisk, RiskLevel
 from trips.domain.trip_request import (
     DEFAULT_SPACING_MI,
     TripRequest,
@@ -14,6 +14,7 @@ from trips.domain.trip_request import (
 )
 from trips.domain.types import Place, PlaceKind
 from trips.domain.weather import HourlyWeather, describe_conditions
+from trips.services.heatmap import Heatmap
 from trips.services.plan_trip import PlannedRoute, TripPlan
 from trips.services.timezones import timezone_at
 
@@ -193,3 +194,31 @@ def _lon_lat(point: LatLon) -> list[float]:
 
 def _utc(moment: datetime) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# One character per hour: "0" Low … "4" No Travel, "-" no forecast.
+_LEVEL_CODES = {level: str(int(level)) for level in RiskLevel}
+
+
+def serialize_heatmap(heatmap: Heatmap) -> dict:
+    """Only cells that ever reach Moderate or worse are sent: Low is drawn transparent."""
+    shown = [
+        cell
+        for cell in heatmap.cells
+        if any(level is not None and level >= RiskLevel.MODERATE for level in cell.levels)
+    ]
+    return {
+        "start_utc": _utc(heatmap.start),
+        "hours": len(heatmap.cells[0].levels) if heatmap.cells else 0,
+        "cell_size_deg": heatmap.cell_deg,
+        "cells_in_corridor": len(heatmap.cells),
+        "cells": [
+            {
+                "center": _lon_lat(cell.center),
+                "levels": "".join(
+                    _LEVEL_CODES[level] if level is not None else "-" for level in cell.levels
+                ),
+            }
+            for cell in shown
+        ],
+    }

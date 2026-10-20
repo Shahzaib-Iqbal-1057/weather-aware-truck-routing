@@ -52,7 +52,7 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "UNAUTHENTICATED_USER": None,
     # Protects the shared TomTom daily quota from a single client hammering the API.
-    "DEFAULT_THROTTLE_RATES": {"geocode": "120/min", "plan": "20/min"},
+    "DEFAULT_THROTTLE_RATES": {"geocode": "120/min", "plan": "20/min", "heatmap": "20/min"},
 }
 
 LANGUAGE_CODE = "en-us"
@@ -66,3 +66,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "")
 # Optional: a paid Open-Meteo plan key. Empty means the free, keyless endpoint.
 OPEN_METEO_API_KEY = os.environ.get("OPEN_METEO_API_KEY", "")
+# Free tier: 600 locations/min, 5,000/hour, 10,000/day. We stay a little under each.
+OPEN_METEO_FREE_LIMITS = {"per_minute": 550, "per_hour": 4_500, "per_day": 9_000}
+
+# Weather map (heatmap): grid cells within this distance of any route, at most this many cells.
+HEATMAP_CORRIDOR_KM = 50
+HEATMAP_MAX_CELLS = int(os.environ.get("HEATMAP_MAX_CELLS", "250"))

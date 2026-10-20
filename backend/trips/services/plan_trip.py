@@ -125,6 +125,12 @@ def plan_trip(
     )
 
 
+def trip_routes(trip: TripRequest, *, router: RoutingProvider | None = None) -> list[Route]:
+    """The trip's candidate routes (the same, cached ones the plan used)."""
+    routes, _ = _candidate_routes(trip, router or get_router())
+    return routes
+
+
 def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> tuple[list[Route], str | None]:
     """The chosen routes, and why there are fewer than MAX_ROUTES (None if there are not)."""
     cache_key = _route_cache_key(trip)

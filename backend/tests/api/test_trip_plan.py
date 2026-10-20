@@ -232,3 +232,51 @@ def test_no_recommendation_without_weather(monkeypatch):
 
     assert body["recommendation"]["route_id"] is None
     assert body["routes"][0]["totals"]["average_risk"] is None
+
+
+def post_heatmap(**overrides):
+    payload = {
+        "origin": DENVER,
+        "destination": DALLAS,
+        "departure_local": denver_wall_clock(2),
+        "cargo_weight_lb": 30_000,
+    } | overrides
+    return APIClient().post(reverse("trip-heatmap"), payload, format="json")
+
+
+def test_heatmap_sends_only_cells_with_weather_worth_drawing():
+    calm = post_heatmap().json()
+
+    assert calm["hours"] == 48
+    assert calm["cells_in_corridor"] > 0
+    assert calm["cells"] == []  # all Low: nothing to draw
+
+
+def test_heatmap_levels_are_one_character_per_hour(monkeypatch):
+    from django.core.cache import cache
+
+    cache.clear()
+    monkeypatch.setattr(
+        weather_service, "get_weather_provider", lambda: FakeWeather(rain_in_per_hr=0.3)
+    )
+
+    body = post_heatmap().json()
+
+    cell = body["cells"][0]
+    assert cell["levels"] == "2" * 48  # rain 0.30 in/hr is High
+    assert len(cell["center"]) == 2
+
+
+def test_heatmap_reports_a_busy_weather_service(monkeypatch):
+    from trips.services.weather_budget import WeatherBudgetExceeded
+
+    monkeypatch.setattr(
+        weather_service,
+        "get_weather_provider",
+        lambda: FakeWeather(error=WeatherBudgetExceeded("busy")),
+    )
+
+    response = post_heatmap()
+
+    assert response.status_code == 503
+    assert response["Retry-After"] == "60"

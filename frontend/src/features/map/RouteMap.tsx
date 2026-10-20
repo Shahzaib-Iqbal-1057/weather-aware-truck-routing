@@ -11,7 +11,8 @@ import {
 import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { useEffect, useRef, useState } from 'react'
-import type { Place, RouteId, RouteResult } from '../../api/types'
+import type { HeatmapResponse, Place, RouteId, RouteResult } from '../../api/types'
+import { heatmapFeatures } from '../heatmap/heatmapFeatures'
 import {
   checkpointFeatures,
   endpointFeatures,
@@ -46,8 +47,17 @@ interface RouteMapProps {
   isLoading: boolean
   /** Times are shown on the departure city's clock. */
   timeZone: string
+  /** Weather map (Stage 8) and the hour it shows; undefined when off. */
+  heatmap: HeatmapResponse | undefined
+  heatmapHour: number
+  /** [lon, lat] of the truck at the weather map's hour, on the selected route. */
+  truckPosition: [number, number] | null
 }
 
+const HEATMAP_SOURCE = 'heatmap'
+const HEATMAP_LAYER = 'heatmap-cells'
+// Low and unknown are transparent so only weather that matters stands out.
+const HEATMAP_OPACITY = 0.45
 const ROUTES_SOURCE = 'routes'
 const ENDPOINTS_SOURCE = 'endpoints'
 const CHECKPOINTS_SOURCE = 'checkpoints'
@@ -68,6 +78,16 @@ const HOVER_RADIUS_PX = 8
 // Draw the selected route above the others.
 const SELECTED_FIRST: ExpressionSpecification = ['case', ['get', 'selected'], 1, 0]
 
+/** Fill colour for the given hour: each cell carries every hour's level as `h0` … `h47`. */
+function heatmapColorAt(hour: number): ExpressionSpecification {
+  return [
+    'match',
+    ['get', `h${hour}`],
+    ...RISK_LEVELS.slice(1, 5).flatMap((level, i) => [i + 1, level.color]),
+    'rgba(0, 0, 0, 0)',
+  ] as unknown as ExpressionSpecification
+}
+
 export function RouteMap({
   routes,
   origin,
@@ -76,6 +96,9 @@ export function RouteMap({
   onSelect,
   isLoading,
   timeZone,
+  heatmap,
+  heatmapHour,
+  truckPosition,
 }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -94,6 +117,10 @@ export function RouteMap({
       style: BASE_MAP_STYLE,
       center: CONTINENTAL_US_CENTER,
       zoom: CONTINENTAL_US_ZOOM,
+      // Open-Meteo's data licence (CC BY 4.0) requires attribution.
+      attributionControl: {
+        customAttribution: 'Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>',
+      },
     })
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
     mapRef.current = map
@@ -131,6 +158,33 @@ export function RouteMap({
       ?.setData(checkpointFeatures(selected, timeZone))
     map.getSource<GeoJSONSource>(REST_STOPS_SOURCE)?.setData(restStopFeatures(selected, timeZone))
   }, [isReady, routes, selectedId, timeZone])
+
+  // Weather map: new data replaces the cells; a new hour only restyles them (no data re-sent).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isReady) return
+    map.getSource<GeoJSONSource>(HEATMAP_SOURCE)?.setData(heatmapFeatures(heatmap))
+  }, [isReady, heatmap])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isReady) return
+    map.setPaintProperty(HEATMAP_LAYER, 'fill-color', heatmapColorAt(heatmapHour))
+  }, [isReady, heatmapHour])
+
+  // The truck at the weather map's hour.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isReady || !truckPosition) return
+    const element = document.createElement('div')
+    element.className = 'truck-marker'
+    element.title = 'Truck at this hour'
+    element.textContent = '🚚'
+    const marker = new Marker({ element }).setLngLat(truckPosition).addTo(map)
+    return () => {
+      marker.remove()
+    }
+  }, [isReady, truckPosition])
 
   // One clickable bubble per route ("A · 12 h 30 min"), on road no other route uses.
   useEffect(() => {
@@ -174,6 +228,14 @@ export function RouteMap({
 }
 
 function addRouteLayers(map: MapLibreMap) {
+  // The weather map goes underneath everything route-related.
+  map.addSource(HEATMAP_SOURCE, { type: 'geojson', data: heatmapFeatures(undefined) })
+  map.addLayer({
+    id: HEATMAP_LAYER,
+    type: 'fill',
+    source: HEATMAP_SOURCE,
+    paint: { 'fill-color': heatmapColorAt(0), 'fill-opacity': HEATMAP_OPACITY },
+  })
   map.addSource(ROUTES_SOURCE, { type: 'geojson', data: routeFeatures([], null) })
   map.addSource(ENDPOINTS_SOURCE, { type: 'geojson', data: endpointFeatures(null, null) })
   map.addSource(CHECKPOINTS_SOURCE, { type: 'geojson', data: checkpointFeatures(null, 'UTC') })

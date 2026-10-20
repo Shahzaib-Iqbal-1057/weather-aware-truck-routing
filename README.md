@@ -64,6 +64,7 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 |---|---|---|
 | GET | `/api/health/` | Liveness check |
 | GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
+| POST | `/api/trips/heatmap/` | Weather map for a planned trip (same body as the plan): risk level in every corridor cell for each of the 48 hours after departure. Requested separately so the routes never wait for it. |
 | POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops, the forecast and risk level at every checkpoint, per-route risk totals and the recommended route with its reason (routes cached 15 min, weather 30 min, rate limited). |
 
 ## How candidate routes are chosen
@@ -231,6 +232,35 @@ So the margin is the smallest one that removes the flicker, and it follows from 
 checkpoint spacing rather than being tuned by hand. Travel time stays balanced against risk in
 two ways: routes more than 25% slower than the fastest are never candidates (see route selection),
 and when the weather is practically the same, the fastest route wins.
+
+## Weather map (0–48 h)
+
+A colored layer around the routes shows weather risk across the trip corridor, for every hour from
+the departure to 48 hours after it. Drag the slider, or press ▶ to play it like a radar loop.
+A 🚚 marker shows where the truck would be at that hour on the selected route, so when the marker
+sits in a colored area, that is when the truck drives through it. The map also shows weather
+*between* checkpoints, e.g. a small storm cell that no checkpoint happens to land on.
+
+- **Same risk rules as the checkpoints** (including the trip's cargo weight), so one legend explains
+  both. Low is transparent: only weather that matters is colored.
+- **The slider starts at the departure hour**, not at "now", so it always covers the whole trip,
+  even for departures days ahead.
+- **Corridor:** grid cells whose center is within 50 km of a route, on a fixed global grid, so
+  trips through the same area share cached forecasts. Cells are 0.25° (~25 km) on shorter trips
+  and coarsen to 0.5° or 1° to stay under 250 cells on long ones; storm systems that matter to
+  trucks are tens to hundreds of km across.
+- **Smooth by construction:** every cell carries all 48 hourly levels, so moving the slider only
+  changes which hour the map colors by. No data is re-sent and no request is made.
+- **Loaded on demand** ("Show weather map"): it costs one weather location per cell, so trips where
+  nobody opens it cost half as much.
+
+**Staying inside the free weather tier.** Open-Meteo's free tier allows 600 locations per minute,
+5,000 per hour and 10,000 per day, and every location in a batched request counts. All weather
+requests go through one budget on the server: a request that would exceed the current minute waits
+for the next one, and one that would exceed the hour or day is refused, so the app shows "weather
+unavailable" rather than failing. When less than four maps' worth of the day's allowance is left,
+the weather map uses a coarser grid. The counter lives in the server process's memory, so the app is
+deployed as a single process. Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0).
 
 ## Assumptions
 
