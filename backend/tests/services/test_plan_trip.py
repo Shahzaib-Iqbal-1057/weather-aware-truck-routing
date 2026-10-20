@@ -210,3 +210,21 @@ def test_the_reason_survives_the_route_cache():
     plan = plan_trip(trip, router=FakeRouter())  # served from cache
 
     assert "more than 25% slower" in plan.notes[0]
+
+
+def test_the_plan_includes_totals_and_a_recommendation():
+    plan = plan_trip(make_trip(), router=FakeRouter([DIRECT, NORTH, SOUTH]))
+
+    assert [p.id for p in plan.routes] == ["A", "B", "C"]
+    assert plan.routes[0].totals.severe_mi == 0
+    assert plan.recommendation.route_index == 0  # calm weather: the fastest
+    assert "practically the same" in plan.recommendation.reason
+
+
+def test_stormy_weather_on_every_route_means_no_recommendation():
+    stormy = FakeWeather(wind_mph=56.0)  # No Travel for any load
+
+    plan = plan_trip(make_trip(), router=FakeRouter([DIRECT, NORTH, SOUTH]), weather=stormy)
+
+    assert plan.recommendation.route_index is None
+    assert len(plan.routes) == 3  # still shown

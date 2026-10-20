@@ -14,6 +14,8 @@
   /* Keep in sync with features/map/mapStyle.ts */
   --route-selected: #2a78d6;
   --route-alternative: #898781;
+  /* Keep in sync with lib/risk.ts */
+  --risk-no-travel: #7a1023;
 
   font:
     15px/1.5 system-ui,

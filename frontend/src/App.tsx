@@ -38,9 +38,10 @@ export default function App() {
   const plan = planTrip.data
   const routes = plan?.routes ?? []
   // Default to the first (fastest) route until the user picks one.
+  // Show the recommended route until the user picks one (the fastest if nothing is recommended).
   const activeId = routes.some((route) => route.id === selectedId)
     ? selectedId
-    : (routes[0]?.id ?? null)
+    : (plan?.recommendation.route_id ?? routes[0]?.id ?? null)
   const { fields: serverErrors, general } = describeError(planTrip.error)
   // All times are shown on the departure city's clock.
   const timeZone = plan?.trip.departure_timezone ?? browserTimeZone()
@@ -71,6 +72,7 @@ export default function App() {
                 onSelect={setSelectedId}
                 timeZone={timeZone}
                 destinationName={plan.trip.destination.label.split(',')[0]}
+                recommendation={plan.recommendation}
               />
               <TripSummary plan={plan} />
             </>

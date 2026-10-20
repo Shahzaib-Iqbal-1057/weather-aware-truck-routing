@@ -98,3 +98,38 @@
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+.route-list__recommendation {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--route-selected);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 0.85rem;
+}
+
+.route-list__recommendation--none {
+  border-left-color: var(--risk-no-travel);
+  background: var(--warning-bg);
+}
+
+.route-card__tag--recommended {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--route-selected);
+  color: #fff;
+  font-weight: 600;
+}
+
+.route-card__risk {
+  font-size: 0.8rem;
+}
+
+.route-card__no-travel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--risk-no-travel);
+}

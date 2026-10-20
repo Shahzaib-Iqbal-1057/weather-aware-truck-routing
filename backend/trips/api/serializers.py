@@ -100,26 +100,40 @@ DISPLAY_TOLERANCE_M = 25.0
 def serialize_plan(plan: TripPlan, warnings: list[str]) -> dict:
     """The planned trip for the browser. Routes are labelled A, B, C in order of arrival."""
     labels = label_points([planned.route for planned in plan.routes])
+    index = plan.recommendation.route_index
     return {
         "trip": TripSerializer(plan.trip).data,
         "routes": [
-            _serialize_route(chr(ord("A") + i), planned, label)
-            for i, (planned, label) in enumerate(zip(plan.routes, labels, strict=True))
+            _serialize_route(planned, label)
+            for planned, label in zip(plan.routes, labels, strict=True)
         ],
+        "recommendation": {
+            "route_id": plan.routes[index].id if index is not None else None,
+            "reason": plan.recommendation.reason,
+        },
         "weather_available": plan.weather_available,
         "notes": plan.notes,
         "warnings": warnings,
     }
 
 
-def _serialize_route(route_id: str, planned: PlannedRoute, label: LatLon) -> dict:
-    route, timeline = planned.route, planned.timeline
+def _serialize_route(planned: PlannedRoute, label: LatLon) -> dict:
+    route, timeline, totals = planned.route, planned.timeline, planned.totals
     return {
-        "id": route_id,
+        "id": planned.id,
         "distance_mi": round(route.length_m / METERS_PER_MILE, 1),
         "driving_time_s": round(timeline.driving_s),
         "trip_time_s": round(timeline.trip_s),  # door to door, including rest stops
         "arrival_utc": _utc(timeline.arrival),
+        "totals": {
+            "severe_mi": round(totals.severe_mi, 1),
+            "high_mi": round(totals.high_mi, 1),
+            "no_travel_mi": round(totals.no_travel_mi, 1),
+            "unknown_mi": round(totals.unknown_mi, 1),
+            "average_risk": (
+                round(totals.average_risk, 3) if totals.average_risk is not None else None
+            ),
+        },
         "geometry": [_lon_lat(point) for point in simplify(route.points, DISPLAY_TOLERANCE_M)],
         # Where to put the route's map label: on road no other route shares.
         "label_position": _lon_lat(label),

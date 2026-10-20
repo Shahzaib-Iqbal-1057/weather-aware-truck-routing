@@ -8,6 +8,7 @@ export function makeRoute(overrides: Partial<RouteResult> = {}): RouteResult {
     driving_time_s: 2 * 3600,
     trip_time_s: 2 * 3600,
     arrival_utc: '2026-10-20T15:00:00Z',
+    totals: { severe_mi: 0, high_mi: 0, no_travel_mi: 0, unknown_mi: 0, average_risk: 0 },
     geometry: [],
     label_position: [0, 0],
     checkpoints: [],

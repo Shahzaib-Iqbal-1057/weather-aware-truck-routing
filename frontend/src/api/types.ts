@@ -82,6 +82,23 @@ export interface RestStop {
   ends_utc: string
 }
 
+/** Miles at each risk level, from the checkpoints that cover them. */
+export interface RouteTotals {
+  severe_mi: number
+  high_mi: number
+  no_travel_mi: number
+  /** Miles with no forecast; left out of every total and of the average. */
+  unknown_mi: number
+  /** Mile-weighted level (Low 0 … Severe 3, No Travel 4); null without any forecast. */
+  average_risk: number | null
+}
+
+export interface Recommendation {
+  /** null when nothing can be recommended (every route No Travel, or no weather). */
+  route_id: RouteId | null
+  reason: string
+}
+
 export interface RouteResult {
   id: RouteId
   distance_mi: number
@@ -89,6 +106,7 @@ export interface RouteResult {
   /** Door to door, including rest stops. */
   trip_time_s: number
   arrival_utc: string
+  totals: RouteTotals
   /** Simplified display line, [lon, lat] pairs. */
   geometry: [number, number][]
   /** [lon, lat] for the map label, on road no other route uses. */
@@ -102,6 +120,7 @@ export interface TripPlanResponse {
   trip: Trip
   /** Fastest first (earliest arrival). */
   routes: RouteResult[]
+  recommendation: Recommendation
   /** False when the weather service failed; routes are still shown. */
   weather_available: boolean
   notes: string[]

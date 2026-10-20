@@ -64,7 +64,7 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 |---|---|---|
 | GET | `/api/health/` | Liveness check |
 | GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
-| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops, and the forecast and risk level at every checkpoint (routes cached 15 min, weather 30 min, rate limited). Later stages add route totals and the recommendation. |
+| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops, the forecast and risk level at every checkpoint, per-route risk totals and the recommended route with its reason (routes cached 15 min, weather 30 min, rate limited). |
 
 ## How candidate routes are chosen
 
@@ -178,6 +178,59 @@ Each checkpoint's forecast is classified with the brief's risk table and load ru
   wind 0.1 mph, rain and snow 0.01 in/hr — and that rounded value is classified, so a popup can
   never show "25.0 mph" next to "Low".
 - **No forecast means "Unknown", never "Low".**
+
+## Choosing the recommended route
+
+The brief asks to prefer, in order: fewest Severe miles, fewest High miles, lowest average risk,
+shortest travel time. This is how I turned that into a rule, and why.
+
+**Totals per route.** Each checkpoint stands for the road halfway to its neighbours, so a route's
+Severe miles are the miles covered by its Severe checkpoints (likewise High and No Travel). Average
+risk is the mile-weighted mean level (Low 0, Moderate 1, High 2, Severe 3, No Travel 4) over the
+miles that have a forecast. Miles without a forecast are left out of every total and shown
+separately: counting them as Low would hide risk, counting them as Severe would invent it.
+Travel time is door-to-door, including the required driver stops.
+
+**The rule.**
+
+1. A route with any No Travel checkpoint is never recommended (it is still shown, with where and
+   why). If every route has one, nothing is recommended and the app suggests a later departure.
+   Without any weather data, nothing is recommended either.
+2. Fewest **Severe miles**, then fewest **High miles**, compared exactly.
+3. Lowest **average risk**, where a route counts as tied with the best if it is within **one
+   checkpoint's worth**: 10 miles at one level higher, i.e. 10 ÷ the route's length in miles
+   (0.036 on a 277-mile trip, 0.0125 on an 800-mile one).
+4. The **fastest** of the routes still tied.
+
+The app shows the result as a "Recommended" badge, selects that route on the map, and gives a
+one-line reason, e.g. "Route B: fewer Severe miles than A (0 vs 40); 1 h slower than A."
+
+**How I arrived at it.** My first idea was to give every step a "practically equal" margin of 10
+miles. Testing on real trips showed two things. First, most routes have no High or Severe miles at
+all, so those steps are decided by genuine ties (0 vs 0) far more often than by small differences.
+Second, a margin on Severe miles would treat a whole Severe checkpoint as noise, which a safety tool
+should never do. So I dropped it: Severe and High miles move in whole-checkpoint steps already, and
+I compare them exactly.
+
+Average risk is different: it is a continuous number and two routes almost never tie, so without a
+margin a meaningless difference would always beat travel time and the brief's fourth rule would
+never apply. To size the margin from evidence rather than pick a number, I ran an 8-hour sweep on a
+real trip through an active weather system (Las Vegas → Flagstaff, two routes, 42,000 lb cargo,
+departures every 15 minutes) and measured how much a route's average moves when nothing real
+changes:
+
+- The typical non-zero change between departures 15 minutes apart was 0.036, exactly one
+  checkpoint changing one level on that trip: a checkpoint's ETA crosses into the next forecast
+  hour and its level flips.
+- With no margin, the recommendation switched between the two routes 7 times in those 8 hours.
+  With a one-checkpoint margin it switched 3 times, each at a real change in the weather. Larger
+  margins (two checkpoints, or a fixed 0.05) gave the same result on that trip but would hide real
+  differences on long trips.
+
+So the margin is the smallest one that removes the flicker, and it follows from the 10-mile
+checkpoint spacing rather than being tuned by hand. Travel time stays balanced against risk in
+two ways: routes more than 25% slower than the fastest are never candidates (see route selection),
+and when the weather is practically the same, the fastest route wins.
 
 ## Assumptions
 

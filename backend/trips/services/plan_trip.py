@@ -10,7 +10,9 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from trips.domain.candidates import MAX_ROUTES, detour_boxes, select_routes, shortfall_reason
+from trips.domain.recommendation import Recommendation, recommend
 from trips.domain.risk import CheckpointRisk, classify, rounded_for_rules
+from trips.domain.route_totals import RouteTotals, route_totals
 from trips.domain.timeline import RouteTimeline, build_timeline
 from trips.domain.trip_request import TripRequest
 from trips.domain.types import Route
@@ -38,11 +40,13 @@ WEATHER_UNAVAILABLE_NOTE = (
 
 @dataclass(frozen=True)
 class PlannedRoute:
+    id: str  # "A", "B", "C" in order of travel time
     route: Route
     timeline: RouteTimeline
     # Aligned with timeline.checkpoints. None = no forecast, so the risk is unknown.
     weather: list[HourlyWeather | None]  # rounded once; these exact values are shown and judged
     risk: list[CheckpointRisk | None]
+    totals: RouteTotals
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,7 @@ class TripPlan:
     trip: TripRequest
     # Fastest first. More driving never means fewer rest stops, so this is also arrival order.
     routes: list[PlannedRoute]
+    recommendation: Recommendation
     weather_available: bool = True
     notes: list[str] = field(default_factory=list)
 
@@ -64,7 +69,7 @@ def plan_trip(
     router: RoutingProvider | None = None,
     weather: WeatherProvider | None = None,
 ) -> TripPlan:
-    """Stages 1–4: candidate routes, checkpoints and rest stops, then weather and risk at each.
+    """Stages 1–6: routes, checkpoints and stops, weather and risk, totals, recommendation.
 
     Raises NoRouteError if the trip cannot be driven at all. If the weather service fails, the
     routes are still returned, with weather marked unavailable.
@@ -92,11 +97,32 @@ def plan_trip(
     risks = [classify(w, trip.cargo_weight_lb) if w is not None else None for w in forecasts]
 
     planned, start = [], 0
-    for route, timeline in zip(routes, timelines, strict=True):
+    for index, (route, timeline) in enumerate(zip(routes, timelines, strict=True)):
         end = start + len(timeline.checkpoints)
-        planned.append(PlannedRoute(route, timeline, forecasts[start:end], risks[start:end]))
+        route_risks = risks[start:end]
+        planned.append(
+            PlannedRoute(
+                id=chr(ord("A") + index),
+                route=route,
+                timeline=timeline,
+                weather=forecasts[start:end],
+                risk=route_risks,
+                totals=route_totals(route.length_m, timeline, route_risks),  # Stage 5
+            )
+        )
         start = end
-    return TripPlan(trip=trip, routes=planned, weather_available=weather_available, notes=notes)
+
+    # Stage 6
+    recommendation = recommend(
+        [p.totals for p in planned], [p.id for p in planned], trip.spacing_mi
+    )
+    return TripPlan(
+        trip=trip,
+        routes=planned,
+        recommendation=recommendation,
+        weather_available=weather_available,
+        notes=notes,
+    )
 
 
 def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> tuple[list[Route], str | None]:

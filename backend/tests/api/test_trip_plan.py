@@ -208,3 +208,27 @@ def test_risk_is_unknown_without_weather(monkeypatch):
     checkpoint = post().json()["routes"][0]["checkpoints"][0]
 
     assert checkpoint["risk"]["level"] == "unknown"
+
+
+def test_routes_include_totals_and_the_plan_names_a_recommended_route():
+    body = post().json()
+
+    assert body["routes"][0]["totals"] == {
+        "severe_mi": 0.0,
+        "high_mi": 0.0,
+        "no_travel_mi": 0.0,
+        "unknown_mi": 0.0,
+        "average_risk": 0.0,
+    }
+    assert body["recommendation"]["route_id"] == "A"
+    assert body["recommendation"]["reason"].startswith("Route A:")
+
+
+def test_no_recommendation_without_weather(monkeypatch):
+    failing = FakeWeather(error=ProviderError("down"))
+    monkeypatch.setattr(weather_service, "get_weather_provider", lambda: failing)
+
+    body = post().json()
+
+    assert body["recommendation"]["route_id"] is None
+    assert body["routes"][0]["totals"]["average_risk"] is None
