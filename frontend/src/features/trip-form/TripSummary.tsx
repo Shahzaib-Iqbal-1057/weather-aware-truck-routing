@@ -26,8 +26,6 @@ export function TripSummary({ plan }: { plan: TripPlanResponse }) {
         <dd>{formatDeparture(trip.departure_utc, trip.departure_timezone)}</dd>
         <dt>Weight</dt>
         <dd>{trip.weight_lb.toLocaleString('en-US')} lb</dd>
-        <dt>Checkpoints</dt>
-        <dd>Every {trip.spacing_mi} mi</dd>
       </dl>
       {warnings.map((warning) => (
         <p key={warning} className="field__warning">
