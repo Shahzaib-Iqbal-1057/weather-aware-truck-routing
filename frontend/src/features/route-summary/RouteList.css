@@ -93,3 +93,8 @@
 .route-card__arrival {
   font-size: 0.85rem;
 }
+
+.route-card__note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

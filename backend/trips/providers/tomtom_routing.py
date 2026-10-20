@@ -72,6 +72,7 @@ def _query_params(
         ("vehicleWidth", vehicle.width_m),
         ("vehicleLength", vehicle.length_m),
         ("vehicleNumberOfAxles", vehicle.axles),
+        ("vehicleMaxSpeed", round(vehicle.max_speed_kmh)),
         ("departAt", depart_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")),
         ("traffic", "true"),
         ("maxAlternatives", min(max_alternatives, MAX_ALTERNATIVES)),

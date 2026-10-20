@@ -198,8 +198,19 @@ function addRouteLayers(map: MapLibreMap) {
       'circle-stroke-width': 1.5,
     },
   })
-  // Driver stops: a "P" (parking) disc in the route's colour, so they never look like the
-  // destination marker. The 10-hour rest is drawn larger than the 30-minute break.
+  map.addLayer({
+    id: 'endpoints',
+    type: 'circle',
+    source: ENDPOINTS_SOURCE,
+    paint: {
+      'circle-radius': 7,
+      'circle-color': ['match', ['get', 'role'], 'origin', ROUTE_CASING_COLOR, INK_COLOR],
+      'circle-stroke-color': INK_COLOR,
+      'circle-stroke-width': 2.5,
+    },
+  })
+  // Driver stops: a "P" (parking) disc in the route's colour, drawn above the start/end markers
+  // so a rest near the destination stays visible. The 10-hour rest is larger than the 30-min break.
   map.addLayer({
     id: REST_STOP_LAYER,
     type: 'circle',
@@ -223,17 +234,6 @@ function addRouteLayers(map: MapLibreMap) {
       'text-ignore-placement': true,
     },
     paint: { 'text-color': ROUTE_CASING_COLOR },
-  })
-  map.addLayer({
-    id: 'endpoints',
-    type: 'circle',
-    source: ENDPOINTS_SOURCE,
-    paint: {
-      'circle-radius': 7,
-      'circle-color': ['match', ['get', 'role'], 'origin', ROUTE_CASING_COLOR, INK_COLOR],
-      'circle-stroke-color': INK_COLOR,
-      'circle-stroke-width': 2.5,
-    },
   })
 }
 

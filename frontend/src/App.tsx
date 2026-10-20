@@ -70,6 +70,7 @@ export default function App() {
                 selectedId={activeId}
                 onSelect={setSelectedId}
                 timeZone={timeZone}
+                destinationName={plan.trip.destination.label.split(',')[0]}
               />
               <TripSummary plan={plan} />
             </>

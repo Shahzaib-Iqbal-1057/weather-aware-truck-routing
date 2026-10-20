@@ -117,6 +117,10 @@ The 30-minute break is not driving time, so a shift is 11 h of driving within 11
 **door-to-door time and arrival include these stops**; route cards show driving and rest time
 separately.
 
+The 11-hour limit has no grace period, so a trip slightly over it is a cliff: 11 h 14 min of
+driving means a 10-hour rest a mile or two before the destination. The app shows this as the law
+requires and says so on the route card, rather than quietly ignoring a few minutes over the limit.
+
 **Times are shown on the departure city's clock** (e.g. "6:50 AM CDT") so a trip that crosses time
 zones reads on one consistent clock.
 
@@ -135,6 +139,10 @@ zones reads on one consistent clock.
 - The truck is a standard US tractor-trailer with a 53 ft trailer (13 ft 6 in tall, 8 ft 6 in
   wide, ~72 ft long, 5 axles), so routes respect low bridges and length limits. Only weight is
   entered by the user.
+- The truck is governed at **65 mph** (sent to the router as its maximum speed). There is no federal
+  truck speed cap (a 65 mph limiter rule was proposed and withdrawn in July 2025), but most large
+  fleets use speed limiters and 65 mph is a common setting. Without a cap, routed truck speeds follow
+  posted limits of up to 75–80 mph. The cap makes ETAs conservative.
 - Wind risk uses sustained wind speed; gusts are shown for information.
 - The driver is driving solo and starts the trip fresh (no hours already used that day or week);
   weekly 60/70-hour limits are not modelled.

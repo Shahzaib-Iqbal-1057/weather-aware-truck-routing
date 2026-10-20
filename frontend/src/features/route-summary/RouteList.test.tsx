@@ -30,6 +30,7 @@ function renderList(onSelect = vi.fn(), notes: string[] = []) {
       selectedId="A"
       onSelect={onSelect}
       timeZone="America/Chicago"
+      destinationName="Denver"
     />,
   )
   return screen.getAllByRole('button')
@@ -53,6 +54,7 @@ describe('RouteList', () => {
         selectedId="A"
         onSelect={() => {}}
         timeZone="America/Chicago"
+        destinationName="Denver"
       />,
     )
     expect(screen.getByRole('button')).toHaveTextContent('2 h driving · 100 mi')
@@ -73,5 +75,48 @@ describe('RouteList', () => {
     expect(
       screen.getByText('Only 2 distinct truck routes exist for this trip.'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('RouteList rest note', () => {
+  const restAt = (mile: number) =>
+    makeRoute({
+      distance_mi: 795.4,
+      rest_stops: [
+        {
+          kind: 'rest',
+          position: [-84.4, 33.7],
+          mile,
+          starts_utc: '2026-10-21T00:00:00Z',
+          ends_utc: '2026-10-21T10:00:00Z',
+        },
+      ],
+    })
+
+  function renderRoute(route: ReturnType<typeof makeRoute>) {
+    render(
+      <RouteList
+        routes={[route]}
+        notes={[]}
+        selectedId="A"
+        onSelect={() => {}}
+        timeZone="America/Chicago"
+        destinationName="Atlanta"
+      />,
+    )
+  }
+
+  it('explains a 10-hour rest just before the destination', () => {
+    renderRoute(restAt(793.8))
+    expect(
+      screen.getByText(
+        'Includes a 10 h rest 2 mi before Atlanta: the 11-hour driving limit runs out first.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('says nothing extra when the rest is well before the destination', () => {
+    renderRoute(restAt(700))
+    expect(screen.queryByText(/before Atlanta/)).not.toBeInTheDocument()
   })
 })
