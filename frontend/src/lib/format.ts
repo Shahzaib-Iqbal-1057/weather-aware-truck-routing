@@ -22,7 +22,7 @@ export function formatClock(utc: string, timeZone: string): string {
   return `${part('weekday')} ${part('hour')}:${part('minute')} ${part('dayPeriod')} ${part('timeZoneName')}`
 }
 
-/** One-line weather summary, e.g. "Light rain, 54°F · wind 18 mph (gusts 31) · rain 0.12 in/hr". */
+/** One-line weather summary, e.g. "Light rain, 54°F · wind 18.4 mph (gusts 31.2) · rain 0.12 in/hr". */
 export function formatWeather(weather: CheckpointWeather | null): string {
   if (!weather) return 'Weather unavailable'
   const parts = []
@@ -30,8 +30,9 @@ export function formatWeather(weather: CheckpointWeather | null): string {
     .filter(Boolean)
     .join(', ')
   if (sky) parts.push(sky)
-  const gusts = weather.gust_mph !== null ? ` (gusts ${Math.round(weather.gust_mph)})` : ''
-  parts.push(`wind ${Math.round(weather.wind_mph)} mph${gusts}`)
+  // Shown at the precision the server classified them at, so numbers and risk level agree.
+  const gusts = weather.gust_mph !== null ? ` (gusts ${weather.gust_mph.toFixed(1)})` : ''
+  parts.push(`wind ${weather.wind_mph.toFixed(1)} mph${gusts}`)
   if (weather.rain_in_per_hr > 0) parts.push(`rain ${weather.rain_in_per_hr.toFixed(2)} in/hr`)
   if (weather.snow_in_per_hr > 0) parts.push(`snow ${weather.snow_in_per_hr.toFixed(2)} in/hr`)
   return parts.join(' · ')

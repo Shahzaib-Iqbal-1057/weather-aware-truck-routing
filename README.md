@@ -20,7 +20,7 @@ frontend/               Vite + React + TypeScript
     api/                fetch client, response types, query hooks
     features/           trip-form, map, route-summary, heatmap
     components/         shared UI
-    lib/                shared helpers (time zones, formatting)
+    lib/                shared helpers (time zones, formatting, risk colours)
 ```
 
 ## Local development
@@ -64,7 +64,7 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 |---|---|---|
 | GET | `/api/health/` | Liveness check |
 | GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
-| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops and the forecast at every checkpoint (routes cached 15 min, weather 30 min, rate limited). Later stages add risk and the recommendation. |
+| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops, and the forecast and risk level at every checkpoint (routes cached 15 min, weather 30 min, rate limited). Later stages add route totals and the recommendation. |
 
 ## How candidate routes are chosen
 
@@ -150,6 +150,34 @@ further out).
   weather risk can't be assessed — never a silent "all clear".
 - An optional `OPEN_METEO_API_KEY` switches to Open-Meteo's paid endpoint (no rate limits) without
   code changes.
+
+## Risk at each checkpoint
+
+Each checkpoint's forecast is classified with the brief's risk table and load rules:
+
+| Condition | Low | Moderate | High | Severe | No Travel |
+|---|---|---|---|---|---|
+| Wind (sustained) | < 25 mph | 25 – < 35 | 35 – < 45 | 45 – < 55 | **≥ 55** |
+| Rain (incl. showers) | < 0.10 in/hr | 0.10 – < 0.25 | 0.25 – < 0.50 | 0.50 – **1.00** | **> 1.00** |
+| Snow | < 0.5 in/hr | 0.5 – < 1.0 | 1.0 – < 2.0 | 2.0 – **3.0** | **> 3.0** |
+
+- **Shared edges go to the more severe level.** The brief's ranges share their edge numbers
+  (rain 0.25 appears under Moderate and High), so a value exactly on an edge takes the higher
+  level: rain 0.25 in/hr is High, wind 35.0 mph is High. No Travel follows the table's wording:
+  wind "≥ 55" (55.0 is No Travel), rain "> 1.00" and snow "> 3.0" (1.00 and 3.0 stay Severe).
+- **Load rules** use sustained wind and the cargo weight: 45–54 mph with cargo over 30,000 lb is
+  No Travel; 35–44 mph with cargo over 40,000 lb is Severe. "Over" is strict: exactly 30,000 lb
+  does not trigger the first rule.
+- **Gust safeguard (our addition):** gusts of 55 mph or more raise the wind level to at least High.
+  The brief's table says only "wind"; we classify sustained wind as the table describes, but it is
+  gusts that push high-sided trucks over, so a dangerous gust is never reported as Low or Moderate.
+  It raises to High rather than No Travel because a gust is a burst, not a constant force.
+- **The checkpoint's level is the worst of wind, rain and snow**, and the popup says what set it
+  (e.g. "Severe risk: Wind 47.2 mph with cargo over 30,000 lb").
+- **What you see is what was judged.** Values are rounded once (half up) to the precision shown —
+  wind 0.1 mph, rain and snow 0.01 in/hr — and that rounded value is classified, so a popup can
+  never show "25.0 mph" next to "Low".
+- **No forecast means "Unknown", never "Low".**
 
 ## Assumptions
 

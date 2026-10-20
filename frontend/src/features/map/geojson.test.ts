@@ -3,6 +3,7 @@ import type { Place, RouteResult } from '../../api/types'
 import { makeRoute } from '../../test/fixtures'
 import {
   checkpointFeatures,
+  checkpointLabel,
   endpointFeatures,
   restStopFeatures,
   routeFeatures,
@@ -79,6 +80,7 @@ describe('checkpointFeatures', () => {
             temperature_f: 54,
             conditions: 'Light rain',
           },
+          risk: { level: 'moderate', reasons: ['Rain 0.12 in/hr'] },
         },
       ],
     })
@@ -86,9 +88,10 @@ describe('checkpointFeatures', () => {
     const [feature] = checkpointFeatures(route, 'America/Chicago').features
 
     expect(feature.properties.label).toBe(
-      'Mile 120 · Tue 9:45 AM CDT\nLight rain, 54°F · wind 18 mph (gusts 31) · rain 0.12 in/hr',
+      'Mile 120 · Tue 9:45 AM CDT\nModerate risk: Rain 0.12 in/hr\nLight rain, 54°F · wind 18.4 mph (gusts 31.2) · rain 0.12 in/hr',
     )
     expect(feature.geometry.coordinates).toEqual([-96.8, 32.78])
+    expect(feature.properties.level).toBe('moderate')
   })
 
   it('is empty when no route is selected', () => {
@@ -116,5 +119,41 @@ describe('restStopFeatures', () => {
       kind: 'rest',
       label: '10 h rest · Tue 7:30 PM CDT – Wed 5:30 AM CDT',
     })
+  })
+})
+
+describe('checkpointLabel', () => {
+  const base = {
+    position: [-96.8, 32.78] as [number, number],
+    mile: 10,
+    eta_utc: '2026-10-20T14:45:00Z',
+  }
+
+  it('says Low risk without reasons for calm weather', () => {
+    const label = checkpointLabel(
+      {
+        ...base,
+        weather: {
+          forecast_hour_utc: '2026-10-20T15:00:00Z',
+          wind_mph: 7,
+          gust_mph: null,
+          rain_in_per_hr: 0,
+          snow_in_per_hr: 0,
+          temperature_f: null,
+          conditions: null,
+        },
+        risk: { level: 'low', reasons: [] },
+      },
+      'America/Chicago',
+    )
+    expect(label.split('\n')[1]).toBe('Low risk')
+  })
+
+  it('says the risk is unknown without a forecast', () => {
+    const label = checkpointLabel(
+      { ...base, weather: null, risk: { level: 'unknown', reasons: ['No forecast'] } },
+      'America/Chicago',
+    )
+    expect(label.split('\n').slice(1)).toEqual(['Risk unknown', 'Weather unavailable'])
   })
 })

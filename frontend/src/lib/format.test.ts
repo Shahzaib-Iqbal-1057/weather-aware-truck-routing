@@ -40,7 +40,7 @@ describe('formatWeather', () => {
   }
 
   it('summarises calm weather without zero rain or snow', () => {
-    expect(formatWeather(calm)).toBe('Clear, 56°F · wind 7 mph (gusts 14)')
+    expect(formatWeather(calm)).toBe('Clear, 56°F · wind 7.2 mph (gusts 13.6)')
   })
 
   it('includes rain and snow intensity when present', () => {
@@ -52,12 +52,12 @@ describe('formatWeather', () => {
         rain_in_per_hr: 0.04,
         snow_in_per_hr: 0.8,
       }),
-    ).toBe('Snow, 28°F · wind 7 mph (gusts 14) · rain 0.04 in/hr · snow 0.80 in/hr')
+    ).toBe('Snow, 28°F · wind 7.2 mph (gusts 13.6) · rain 0.04 in/hr · snow 0.80 in/hr')
   })
 
   it('copes with missing optional values', () => {
     expect(formatWeather({ ...calm, conditions: null, temperature_f: null, gust_mph: null })).toBe(
-      'wind 7 mph',
+      'wind 7.2 mph',
     )
   })
 

@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
-import type { Place, RouteId, RouteResult } from '../../api/types'
+import type { Checkpoint, Place, RiskLevelKey, RouteId, RouteResult } from '../../api/types'
 import { formatClock, formatDuration, formatWeather } from '../../lib/format'
+import { riskStyle } from '../../lib/risk'
 
 export interface RouteProperties {
   id: RouteId
@@ -74,25 +75,36 @@ export interface PointLabelProperties {
   label: string
 }
 
+export interface CheckpointProperties extends PointLabelProperties {
+  level: RiskLevelKey
+}
+
 export interface RestStopProperties extends PointLabelProperties {
   kind: 'break' | 'rest'
 }
 
-/** The selected route's checkpoints, labelled with mile, ETA and the forecast for that hour. */
+/** The selected route's checkpoints, with their risk level and a label for the popup. */
 export function checkpointFeatures(
   route: RouteResult | null,
   timeZone: string,
-): FeatureCollection<Point, PointLabelProperties> {
+): FeatureCollection<Point, CheckpointProperties> {
   return {
     type: 'FeatureCollection',
     features: (route?.checkpoints ?? []).map((checkpoint) => ({
       type: 'Feature',
-      properties: {
-        label: `Mile ${Math.round(checkpoint.mile)} · ${formatClock(checkpoint.eta_utc, timeZone)}\n${formatWeather(checkpoint.weather)}`,
-      },
+      properties: { level: checkpoint.risk.level, label: checkpointLabel(checkpoint, timeZone) },
       geometry: { type: 'Point', coordinates: checkpoint.position },
     })),
   }
+}
+
+/** "Mile 120 · Tue 9:45 AM CDT", then "High risk: Gusts 57.3 mph", then the weather summary. */
+export function checkpointLabel(checkpoint: Checkpoint, timeZone: string): string {
+  const where = `Mile ${Math.round(checkpoint.mile)} · ${formatClock(checkpoint.eta_utc, timeZone)}`
+  const { label } = riskStyle(checkpoint.risk.level)
+  const why = checkpoint.risk.reasons.length ? `: ${checkpoint.risk.reasons.join(', ')}` : ''
+  const risk = checkpoint.risk.level === 'unknown' ? 'Risk unknown' : `${label} risk${why}`
+  return `${where}\n${risk}\n${formatWeather(checkpoint.weather)}`
 }
 
 /** The selected route's required driver stops, labelled with their kind and times. */

@@ -164,3 +164,25 @@ def test_a_failed_detour_is_not_cached_so_the_next_plan_tries_again():
     plan = plan_trip(trip, router=FakeRouter([DIRECT, NORTH], [SOUTH]))
 
     assert routes_of(plan) == [DIRECT, NORTH, SOUTH]
+
+
+def test_each_checkpoint_gets_a_risk_level_from_its_rounded_weather():
+    windy = FakeWeather(
+        wind_mph=47.04, gust_mph=60.0
+    )  # Severe wind; cargo 30,000 lb is not "> 30,000"
+
+    plan = plan_trip(make_trip(), router=FakeRouter([DIRECT, NORTH, SOUTH]), weather=windy)
+
+    first = plan.routes[0]
+    assert first.weather[0].wind_mph == 47.0  # rounded once
+    assert first.risk[0].level.label == "Severe"
+    assert len(first.risk) == len(first.timeline.checkpoints)
+
+
+def test_risk_is_unknown_when_weather_is_unavailable():
+    plan = plan_trip(
+        make_trip(),
+        router=FakeRouter([DIRECT, NORTH, SOUTH]),
+        weather=FakeWeather(error=ProviderError("down")),
+    )
+    assert all(risk is None for planned in plan.routes for risk in planned.risk)

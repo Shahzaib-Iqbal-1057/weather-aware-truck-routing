@@ -189,3 +189,22 @@ def test_weather_outage_still_returns_routes(monkeypatch):
     assert len(body["routes"]) == 3
     assert body["routes"][0]["checkpoints"][0]["weather"] is None
     assert any("Weather is unavailable" in note for note in body["notes"])
+
+
+def test_checkpoints_include_risk_level_and_reasons(monkeypatch):
+    stormy = FakeWeather(wind_mph=20.0, gust_mph=57.3, rain_in_per_hr=0.31)
+    monkeypatch.setattr(weather_service, "get_weather_provider", lambda: stormy)
+
+    checkpoint = post().json()["routes"][0]["checkpoints"][0]
+
+    assert checkpoint["risk"] == {"level": "high", "reasons": ["Gusts 57.3 mph", "Rain 0.31 in/hr"]}
+    assert checkpoint["weather"]["gust_mph"] == 57.3
+
+
+def test_risk_is_unknown_without_weather(monkeypatch):
+    failing = FakeWeather(error=ProviderError("down"))
+    monkeypatch.setattr(weather_service, "get_weather_provider", lambda: failing)
+
+    checkpoint = post().json()["routes"][0]["checkpoints"][0]
+
+    assert checkpoint["risk"]["level"] == "unknown"

@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from trips.domain.candidates import label_points
 from trips.domain.geo import METERS_PER_MILE, LatLon, simplify
+from trips.domain.risk import CheckpointRisk
 from trips.domain.trip_request import (
     DEFAULT_SPACING_MI,
     TripRequest,
@@ -128,8 +129,11 @@ def _serialize_route(route_id: str, planned: PlannedRoute, label: LatLon) -> dic
                 "mile": round(checkpoint.mile, 1),
                 "eta_utc": _utc(checkpoint.eta),
                 "weather": _serialize_weather(weather),
+                "risk": _serialize_risk(risk),
             }
-            for checkpoint, weather in zip(timeline.checkpoints, planned.weather, strict=True)
+            for checkpoint, weather, risk in zip(
+                timeline.checkpoints, planned.weather, planned.risk, strict=True
+            )
         ],
         "rest_stops": [
             {
@@ -144,15 +148,22 @@ def _serialize_route(route_id: str, planned: PlannedRoute, label: LatLon) -> dic
     }
 
 
+def _serialize_risk(risk: CheckpointRisk | None) -> dict:
+    if risk is None:
+        return {"level": "unknown", "reasons": ["No forecast for this place and hour"]}
+    return {"level": risk.level.key, "reasons": risk.reasons}
+
+
 def _serialize_weather(weather: HourlyWeather | None) -> dict | None:
     if weather is None:
         return None
     return {
         "forecast_hour_utc": _utc(weather.hour),
-        "wind_mph": round(weather.wind_mph, 1),
-        "gust_mph": round(weather.gust_mph, 1) if weather.gust_mph is not None else None,
-        "rain_in_per_hr": round(weather.rain_in_per_hr, 3),
-        "snow_in_per_hr": round(weather.snow_in_per_hr, 3),
+        # Already rounded once by the risk stage; shown exactly as classified.
+        "wind_mph": weather.wind_mph,
+        "gust_mph": weather.gust_mph,
+        "rain_in_per_hr": weather.rain_in_per_hr,
+        "snow_in_per_hr": weather.snow_in_per_hr,
         "temperature_f": round(weather.temperature_f)
         if weather.temperature_f is not None
         else None,

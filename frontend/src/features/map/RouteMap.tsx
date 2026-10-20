@@ -19,7 +19,9 @@ import {
   routeFeatures,
   routesBounds,
 } from './geojson'
+import { RISK_LEVELS } from '../../lib/risk'
 import { createRouteBubble } from './routeBubble'
+import { RiskLegend } from './RiskLegend'
 import {
   BASE_MAP_STYLE,
   CONTINENTAL_US_CENTER,
@@ -53,6 +55,12 @@ const REST_STOPS_SOURCE = 'rest-stops'
 const ROUTE_LINE_LAYER = 'route-line'
 const CHECKPOINT_LAYER = 'checkpoint-dots'
 const REST_STOP_LAYER = 'rest-stop-markers'
+const RISK_COLOR_BY_LEVEL = [
+  'match',
+  ['get', 'level'],
+  ...RISK_LEVELS.flatMap((level) => [level.key, level.color]),
+  RISK_LEVELS[RISK_LEVELS.length - 1].color,
+] as unknown as ExpressionSpecification
 // Hovering (or tapping) near one of these shows its `label` property in a small popup.
 const LABELLED_LAYERS = [REST_STOP_LAYER, CHECKPOINT_LAYER]
 // Pixels around the pointer that count as "on" a point, so the small dots are easy to hit.
@@ -155,6 +163,7 @@ export function RouteMap({
   return (
     <div className="route-map">
       <div ref={containerRef} className="route-map__canvas" />
+      {routes.length > 0 && <RiskLegend />}
       {isLoading && (
         <div className="route-map__overlay" role="status">
           Finding truck routes…
@@ -192,9 +201,10 @@ function addRouteLayers(map: MapLibreMap) {
     type: 'circle',
     source: CHECKPOINTS_SOURCE,
     paint: {
-      'circle-radius': 3.5,
-      'circle-color': ROUTE_CASING_COLOR,
-      'circle-stroke-color': ROUTE_SELECTED_COLOR,
+      'circle-radius': 4.5,
+      'circle-color': RISK_COLOR_BY_LEVEL,
+      // White ring separates the dot from the blue route line and from neighbouring dots.
+      'circle-stroke-color': ROUTE_CASING_COLOR,
       'circle-stroke-width': 1.5,
     },
   })

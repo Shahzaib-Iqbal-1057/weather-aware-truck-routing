@@ -54,6 +54,14 @@ export interface CheckpointWeather {
   conditions: string | null
 }
 
+export type RiskLevelKey = 'low' | 'moderate' | 'high' | 'severe' | 'no_travel' | 'unknown'
+
+export interface CheckpointRisk {
+  level: RiskLevelKey
+  /** What set the level, e.g. "Wind 47.2 mph with cargo over 30,000 lb". Empty when Low. */
+  reasons: string[]
+}
+
 export interface Checkpoint {
   /** [lon, lat] */
   position: [number, number]
@@ -61,6 +69,7 @@ export interface Checkpoint {
   eta_utc: string
   /** null when no forecast is available for this place and hour. */
   weather: CheckpointWeather | null
+  risk: CheckpointRisk
 }
 
 export interface RestStop {

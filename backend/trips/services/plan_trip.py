@@ -10,6 +10,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from trips.domain.candidates import MAX_ROUTES, detour_boxes, select_routes
+from trips.domain.risk import CheckpointRisk, classify, rounded_for_rules
 from trips.domain.timeline import RouteTimeline, build_timeline
 from trips.domain.trip_request import TripRequest
 from trips.domain.types import Route
@@ -39,8 +40,9 @@ WEATHER_UNAVAILABLE_NOTE = (
 class PlannedRoute:
     route: Route
     timeline: RouteTimeline
-    # Forecast at each checkpoint's ETA, aligned with timeline.checkpoints. None = unknown.
-    weather: list[HourlyWeather | None]
+    # Aligned with timeline.checkpoints. None = no forecast, so the risk is unknown.
+    weather: list[HourlyWeather | None]  # rounded once; these exact values are shown and judged
+    risk: list[CheckpointRisk | None]
 
 
 @dataclass(frozen=True)
@@ -62,7 +64,7 @@ def plan_trip(
     router: RoutingProvider | None = None,
     weather: WeatherProvider | None = None,
 ) -> TripPlan:
-    """Stages 1–3: candidate routes, checkpoints and rest stops, then weather at each checkpoint.
+    """Stages 1–4: candidate routes, checkpoints and rest stops, then weather and risk at each.
 
     Raises NoRouteError if the trip cannot be driven at all. If the weather service fails, the
     routes are still returned, with weather marked unavailable.
@@ -85,10 +87,14 @@ def plan_trip(
         weather_available = False
         notes.append(WEATHER_UNAVAILABLE_NOTE)
 
+    # Stage 4: round once, then classify those same values.
+    forecasts = [rounded_for_rules(w) if w is not None else None for w in forecasts]
+    risks = [classify(w, trip.cargo_weight_lb) if w is not None else None for w in forecasts]
+
     planned, start = [], 0
     for route, timeline in zip(routes, timelines, strict=True):
         end = start + len(timeline.checkpoints)
-        planned.append(PlannedRoute(route, timeline, forecasts[start:end]))
+        planned.append(PlannedRoute(route, timeline, forecasts[start:end], risks[start:end]))
         start = end
     return TripPlan(trip=trip, routes=planned, weather_available=weather_available, notes=notes)
 
