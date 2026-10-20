@@ -25,7 +25,6 @@ function values(overrides: Partial<TripFormValues> = {}): TripFormValues {
     departureLocal: '2026-10-20T08:00',
     departureTimeZone: 'America/Denver',
     weightLb: '40000',
-    spacingMi: 25,
     ...overrides,
   }
 }

@@ -5,7 +5,6 @@ import {
   MIN_TRIP_MILES,
   PAST_DEPARTURE_GRACE_MINUTES,
   RELIABLE_FORECAST_HOURS,
-  SPACING_OPTIONS_MI,
   WEIGHT_MAX_LB,
   WEIGHT_MIN_LB,
 } from './rules'
@@ -17,10 +16,9 @@ export interface TripFormValues {
   departureLocal: string
   departureTimeZone: string
   weightLb: string
-  spacingMi: number
 }
 
-export type TripFormField = 'origin' | 'destination' | 'departureLocal' | 'weightLb' | 'spacingMi'
+export type TripFormField = 'origin' | 'destination' | 'departureLocal' | 'weightLb'
 export type TripFormErrors = Partial<Record<TripFormField, string>>
 
 const HOUR_MS = 3_600_000
@@ -62,10 +60,6 @@ export function validateTripForm(values: TripFormValues, now: Date): TripFormErr
     errors.weightLb = 'Enter the total weight in whole pounds.'
   } else if (weight < WEIGHT_MIN_LB || weight > WEIGHT_MAX_LB) {
     errors.weightLb = `Weight must be between ${WEIGHT_MIN_LB.toLocaleString('en-US')} and ${WEIGHT_MAX_LB.toLocaleString('en-US')} lb.`
-  }
-
-  if (!(SPACING_OPTIONS_MI as readonly number[]).includes(values.spacingMi)) {
-    errors.spacingMi = 'Choose a checkpoint spacing.'
   }
 
   return errors

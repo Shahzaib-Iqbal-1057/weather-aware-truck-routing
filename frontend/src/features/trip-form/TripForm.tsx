@@ -11,9 +11,7 @@ import { useNow } from '../../lib/useNow'
 import { PlaceAutocomplete } from './PlaceAutocomplete'
 import './TripForm.css'
 import {
-  DEFAULT_SPACING_MI,
   MAX_DEPARTURE_AHEAD_DAYS,
-  SPACING_OPTIONS_MI,
   WEIGHT_MAX_LB,
   WEIGHT_MIN_LB,
   WIND_RULE_THRESHOLDS_LB,
@@ -44,7 +42,6 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
       departureLocal: defaultDeparture(new Date(), timeZone),
       departureTimeZone: timeZone,
       weightLb: '',
-      spacingMi: DEFAULT_SPACING_MI,
     }
   })
   const [departureEdited, setDepartureEdited] = useState(false)
@@ -89,7 +86,6 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
       },
       departure_local: values.departureLocal,
       weight_lb: Number(values.weightLb),
-      spacing_mi: values.spacingMi,
     })
   }
 
@@ -168,28 +164,6 @@ export function TripForm({ onSubmit, isSubmitting, serverErrors, generalError }:
         </p>
         {fieldError('weightLb') && <p className="field__error">{fieldError('weightLb')}</p>}
       </div>
-
-      <fieldset className="field">
-        <legend>Check weather every</legend>
-        <div className="segmented">
-          {SPACING_OPTIONS_MI.map((miles) => (
-            <label key={miles} className="segmented__option">
-              <input
-                type="radio"
-                name="spacing"
-                value={miles}
-                checked={values.spacingMi === miles}
-                onChange={() => update({ spacingMi: miles })}
-              />
-              <span>{miles} mi</span>
-            </label>
-          ))}
-        </div>
-        <p className="field__hint">
-          Shorter spacing checks more points, so small storms are less likely to be missed.
-        </p>
-        {fieldError('spacingMi') && <p className="field__error">{fieldError('spacingMi')}</p>}
-      </fieldset>
 
       {generalError && <p className="trip-form__error">{generalError}</p>}
 

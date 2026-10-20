@@ -6,7 +6,6 @@ const API_TO_FORM_FIELD: Record<string, TripFormField> = {
   destination: 'destination',
   departure_local: 'departureLocal',
   weight_lb: 'weightLb',
-  spacing_mi: 'spacingMi',
 }
 
 /** Map a DRF 400 body onto form fields. Anything unrecognised goes into `general`. */

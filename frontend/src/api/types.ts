@@ -24,7 +24,6 @@ export interface TripPlanRequest {
   /** Wall-clock time in the origin's time zone, "YYYY-MM-DDTHH:MM". */
   departure_local: string
   weight_lb: number
-  spacing_mi: number
 }
 
 export interface Trip {
