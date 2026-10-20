@@ -139,7 +139,8 @@ zones reads on one consistent clock.
 - The truck is a standard US tractor-trailer with a 53 ft trailer (13 ft 6 in tall, 8 ft 6 in
   wide, ~72 ft long, 5 axles), so routes respect low bridges and length limits. Only weight is
   entered by the user.
-- The truck is governed at **65 mph** (sent to the router as its maximum speed). There is no federal
+- The truck is governed at **65 mph** (sent to the router as a 104 km/h maximum speed: the router
+  takes whole km/h, so the value is rounded down to never exceed 65 mph). There is no federal
   truck speed cap (a 65 mph limiter rule was proposed and withdrawn in July 2025), but most large
   fleets use speed limiters and 65 mph is a common setting. Without a cap, routed truck speeds follow
   posted limits of up to 75–80 mph. The cap makes ETAs conservative.

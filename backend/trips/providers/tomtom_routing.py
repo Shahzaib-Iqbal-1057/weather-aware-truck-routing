@@ -4,6 +4,7 @@ Orbis Routing has no truck mode, which is why the Genesis API is used.
 """
 
 from datetime import UTC, datetime
+from math import floor
 from typing import Any
 
 import requests
@@ -72,7 +73,8 @@ def _query_params(
         ("vehicleWidth", vehicle.width_m),
         ("vehicleLength", vehicle.length_m),
         ("vehicleNumberOfAxles", vehicle.axles),
-        ("vehicleMaxSpeed", round(vehicle.max_speed_kmh)),
+        # TomTom takes whole km/h; round down so the cap never exceeds the stated speed.
+        ("vehicleMaxSpeed", floor(vehicle.max_speed_kmh)),
         ("departAt", depart_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")),
         ("traffic", "true"),
         ("maxAlternatives", min(max_alternatives, MAX_ALTERNATIVES)),

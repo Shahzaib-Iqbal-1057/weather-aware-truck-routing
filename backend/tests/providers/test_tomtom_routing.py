@@ -114,7 +114,7 @@ def test_requests_a_truck_route_with_weight_dimensions_and_departure():
     assert params["vehicleWeight"] == 29_484  # 65,000 lb in kg
     assert params["vehicleHeight"] == 4.11
     assert params["vehicleNumberOfAxles"] == 5
-    assert params["vehicleMaxSpeed"] == 105  # 65 mph in km/h
+    assert params["vehicleMaxSpeed"] == 104  # 65 mph = 104.6 km/h, rounded down so never over 65
     assert params["departAt"] == "2026-10-20T14:00:00Z"
     assert params["maxAlternatives"] == 3
     extended = [
