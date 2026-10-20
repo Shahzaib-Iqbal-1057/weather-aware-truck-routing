@@ -264,7 +264,7 @@ def post_heatmap(**overrides):
 def test_heatmap_sends_only_cells_with_weather_worth_drawing():
     calm = post_heatmap().json()
 
-    assert calm["hours"] == 48
+    assert calm["hours"] == 49  # departure hour + 48: a 0–48 h slider
     assert calm["cells_in_corridor"] > 0
     assert calm["cells"] == []  # all Low: nothing to draw
 
@@ -280,7 +280,7 @@ def test_heatmap_levels_are_one_character_per_hour(monkeypatch):
     body = post_heatmap().json()
 
     cell = body["cells"][0]
-    assert cell["levels"] == "2" * 48  # rain 0.30 in/hr is High
+    assert cell["levels"] == "2" * 49  # rain 0.30 in/hr is High
     assert len(cell["center"]) == 2
 
 
@@ -297,3 +297,46 @@ def test_heatmap_reports_a_busy_weather_service(monkeypatch):
 
     assert response.status_code == 503
     assert response["Retry-After"] == "60"
+
+
+def test_heatmap_works_for_a_planned_trip_whose_departure_has_since_passed():
+    # Planned "now", map opened 20 minutes later: the plan itself would now be refused.
+    departure = denver_wall_clock(-20 / 60)
+
+    assert post(departure_local=departure).status_code == 400
+    assert post_heatmap(departure_local=departure).status_code == 200
+
+
+def test_heatmap_says_when_the_weather_allowance_is_used_up(monkeypatch):
+    from trips.services.weather_budget import WeatherAllowanceUsedUp
+
+    monkeypatch.setattr(
+        weather_service,
+        "get_weather_provider",
+        lambda: FakeWeather(
+            error=WeatherAllowanceUsedUp("The daily weather allowance is used up.")
+        ),
+    )
+
+    response = post_heatmap()
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "weather_allowance_used_up"
+    assert "Retry-After" not in response
+
+
+def test_rate_limits_ignore_a_client_supplied_forwarded_for():
+    client = APIClient()
+    payload = {
+        "origin": DENVER,
+        "destination": DALLAS,
+        "departure_local": denver_wall_clock(2),
+        "cargo_weight_lb": 30_000,
+    }
+    statuses = [
+        client.post(
+            reverse("trip-plan"), payload, format="json", HTTP_X_FORWARDED_FOR=f"10.0.0.{n}"
+        ).status_code
+        for n in range(21)
+    ]
+    assert statuses[-1] == 429  # 20/min per client, however the header is spoofed

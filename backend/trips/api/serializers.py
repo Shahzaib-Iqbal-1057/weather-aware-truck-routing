@@ -9,6 +9,8 @@ from trips.domain.risk import CheckpointRisk, RiskLevel
 from trips.domain.risk_stretches import risk_stretches
 from trips.domain.trip_request import (
     DEFAULT_SPACING_MI,
+    PAST_DEPARTURE_GRACE,
+    PLANNED_TRIP_PAST_GRACE,
     TripRequest,
     TripValidationError,
     build_trip_request,
@@ -63,6 +65,8 @@ class TripPlanRequestSerializer(serializers.Serializer):
     cargo_weight_lb = serializers.IntegerField()
     spacing_mi = serializers.IntegerField(default=DEFAULT_SPACING_MI)
 
+    past_grace = PAST_DEPARTURE_GRACE
+
     def validate(self, attrs: dict) -> dict:
         origin, destination = attrs["origin"], attrs["destination"]
         try:
@@ -71,10 +75,17 @@ class TripPlanRequestSerializer(serializers.Serializer):
                 origin_timezone=timezone_at(origin.lat, origin.lon),
                 destination_timezone=timezone_at(destination.lat, destination.lon),
                 now=timezone.now(),
+                past_grace=self.past_grace,
             )
         except TripValidationError as exc:
             raise serializers.ValidationError(exc.errors) from None
         return {"trip": trip, "warnings": warnings}
+
+
+class TripHeatmapRequestSerializer(TripPlanRequestSerializer):
+    """The same trip as the plan; its departure may have passed while the user read the plan."""
+
+    past_grace = PLANNED_TRIP_PAST_GRACE
 
 
 class TripSerializer(serializers.Serializer):

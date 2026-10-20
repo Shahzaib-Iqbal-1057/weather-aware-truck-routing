@@ -36,6 +36,7 @@ interface TripFormProps {
 }
 
 const DAY_MS = 24 * 3_600_000
+const QUARTER_HOUR_MS = 15 * 60_000
 
 // Form values that are fields the server can report errors on.
 const FIELD_KEYS: Record<TripFormField, true> = {
@@ -43,6 +44,13 @@ const FIELD_KEYS: Record<TripFormField, true> = {
   destination: true,
   departureLocal: true,
   cargoWeightLb: true,
+}
+
+/** The values with the departure the form shows: the user's, or "now" if they haven't set one. */
+function withDefaultDeparture(values: TripFormValues, edited: boolean, now: Date): TripFormValues {
+  return edited
+    ? values
+    : { ...values, departureLocal: defaultDeparture(now, values.departureTimeZone) }
 }
 
 export function TripForm({
@@ -76,35 +84,39 @@ export function TripForm({
   )
   const errors = { ...currentServerErrors, ...clientErrors }
   const now = useNow()
+  // Until the user picks a departure, the default stays "now" (to the next quarter hour), so a
+  // form left open for a while, or reopened with "Change trip", never submits a past time.
+  const shown = withDefaultDeparture(values, departureEdited, now)
 
   function update(patch: Partial<TripFormValues>) {
     const next = { ...values, ...patch }
     setValues(next)
-    const edited = Object.keys(patch).filter((key): key is TripFormField => key in FIELD_KEYS)
-    setEditedSinceSubmit((previous) => new Set([...previous, ...edited]))
+    const fields = Object.keys(patch).filter((key): key is TripFormField => key in FIELD_KEYS)
+    setEditedSinceSubmit((previous) => new Set([...previous, ...fields]))
     // After the first submit attempt, keep errors in sync as the user fixes them.
-    if (submitted) setClientErrors(validateTripForm(next, new Date()))
+    const edited = departureEdited || 'departureLocal' in patch
+    if (submitted) {
+      const at = new Date()
+      setClientErrors(validateTripForm(withDefaultDeparture(next, edited, at), at))
+    }
   }
 
   function handleOriginChange(origin: Place | null) {
-    const timeZone = origin?.timezone ?? browserTimeZone()
-    // The departure is a local time at the origin. Until the user picks one,
-    // keep the default ("now") correct for the new origin's zone.
-    const departureLocal = departureEdited
-      ? values.departureLocal
-      : defaultDeparture(new Date(), timeZone)
-    update({ origin, departureTimeZone: timeZone, departureLocal })
+    // The departure is a local time at the origin; an unedited default follows the new zone.
+    update({ origin, departureTimeZone: origin?.timezone ?? browserTimeZone() })
   }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setSubmitted(true)
     setEditedSinceSubmit(new Set())
-    const found = validateTripForm(values, new Date())
+    const submittedAt = new Date()
+    const current = withDefaultDeparture(values, departureEdited, submittedAt)
+    const found = validateTripForm(current, submittedAt)
     setClientErrors(found)
-    if (Object.keys(found).length > 0 || !values.origin || !values.destination) return
+    if (Object.keys(found).length > 0 || !current.origin || !current.destination) return
 
-    const { origin, destination } = values
+    const { origin, destination } = current
     onSubmit({
       origin: { label: origin.label, lat: origin.lat, lon: origin.lon, kind: origin.kind },
       destination: {
@@ -113,17 +125,19 @@ export function TripForm({
         lon: destination.lon,
         kind: destination.kind,
       },
-      departure_local: values.departureLocal,
-      cargo_weight_lb: Number(values.cargoWeightLb),
+      departure_local: current.departureLocal,
+      cargo_weight_lb: Number(current.cargoWeightLb),
     })
   }
 
   const fieldError = (field: TripFormField) => errors[field]
-  const departureInstant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(values.departureLocal)
-    ? zonedWallClockToUtc(values.departureLocal, values.departureTimeZone)
+  const departureInstant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(shown.departureLocal)
+    ? zonedWallClockToUtc(shown.departureLocal, shown.departureTimeZone)
     : now
-  const zoneAbbr = timeZoneAbbreviation(departureInstant, values.departureTimeZone)
-  const warning = departureWarning(values, now)
+  const zoneAbbr = timeZoneAbbreviation(departureInstant, shown.departureTimeZone)
+  const warning = departureWarning(shown, now)
+  // The picker steps in quarter hours counted from `min`, so `min` sits on a quarter hour too.
+  const earliest = new Date(Math.floor(now.getTime() / QUARTER_HOUR_MS) * QUARTER_HOUR_MS)
 
   return (
     <form id={id} className="trip-form" onSubmit={handleSubmit} noValidate hidden={hidden}>
@@ -148,12 +162,12 @@ export function TripForm({
           id="departure"
           type="datetime-local"
           step={900}
-          min={wallClockInZone(now, values.departureTimeZone)}
+          min={wallClockInZone(earliest, values.departureTimeZone)}
           max={wallClockInZone(
-            new Date(now.getTime() + MAX_DEPARTURE_AHEAD_DAYS * DAY_MS),
+            new Date(earliest.getTime() + MAX_DEPARTURE_AHEAD_DAYS * DAY_MS),
             values.departureTimeZone,
           )}
-          value={values.departureLocal}
+          value={shown.departureLocal}
           aria-invalid={Boolean(fieldError('departureLocal'))}
           onChange={(event) => {
             setDepartureEdited(true)

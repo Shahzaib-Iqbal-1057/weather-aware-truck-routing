@@ -6,7 +6,9 @@
 3. Lowest average risk. Averages almost never tie exactly, so a route counts as tied with the
    lowest when it is at most one checkpoint's worth higher: one checkpoint (spacing miles)
    changing one level, i.e. spacing ÷ the route's length. That is the smallest difference the
-   sampling can detect; smaller differences flip with a 15-minute change of departure.
+   sampling can detect; smaller differences flip with a 15-minute change of departure. On short
+   trips one checkpoint is a large share of the route, so the margin is capped at a quarter of a
+   level: a whole route at Moderate is never "practically the same" as one at Low.
 4. The fastest door-to-door of the routes still tied.
 
 Travel time is also bounded upstream: no candidate is more than 25% slower than the fastest.
@@ -18,6 +20,8 @@ from trips.domain.route_totals import RouteTotals
 
 # Mile totals are sums of floats; differences below this are rounding, not a different count.
 _EPSILON = 1e-6
+# The largest difference in average level that still counts as a tie (applies below ~40 miles).
+MAX_AVERAGE_TIE = 0.25
 
 
 @dataclass(frozen=True)
@@ -61,7 +65,8 @@ def recommend(totals: list[RouteTotals], ids: list[str], spacing_mi: float) -> R
     keep(
         "average",
         lambda i: (
-            totals[i].average_risk - best_average <= spacing_mi / totals[i].length_mi + _EPSILON
+            totals[i].average_risk - best_average
+            <= min(spacing_mi / totals[i].length_mi, MAX_AVERAGE_TIE) + _EPSILON
         ),
     )
     winner = min(remaining, key=lambda i: totals[i].trip_s)

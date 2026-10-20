@@ -1,8 +1,8 @@
-import { lazy, Suspense, useCallback, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useMemo, useState } from 'react'
 import { ApiError } from './api/client'
-import { useHeatmap } from './api/heatmap'
+import { useHeatmap, weatherAllowanceUsedUp } from './api/heatmap'
 import { usePlanTrip } from './api/trips'
-import type { RouteId } from './api/types'
+import type { RouteId, TripPlanRequest } from './api/types'
 import { browserTimeZone } from './lib/zonedTime'
 import { BackendStatus } from './components/BackendStatus'
 import { MapErrorBoundary } from './components/MapErrorBoundary'
@@ -22,8 +22,20 @@ const RouteMap = lazy(() =>
   import('./features/map/RouteMap').then((module) => ({ default: module.RouteMap })),
 )
 
+// Moving the weather map's slider re-renders App every hour step. The sidebar doesn't depend on
+// the hour, so it skips those renders (its props are stable between them).
+const Sidebar = {
+  BackendStatus: memo(BackendStatus),
+  TripSummary: memo(TripSummary),
+  TripForm: memo(TripForm),
+  RouteList: memo(RouteList),
+  CheckpointTable: memo(CheckpointTable),
+}
+
 const GENERIC_ERROR = 'Could not plan the trip. Please try again.'
 const TRIP_FORM_ID = 'trip-form'
+// The departure hour and each of the 48 after it (the server's count, until it has answered).
+const HEATMAP_HOURS = 49
 
 function describeError(error: Error | null) {
   if (!error) return { fields: {}, general: null }
@@ -48,6 +60,18 @@ export default function App() {
   const [heatmapOn, setHeatmapOn] = useState(false)
   const [heatmapHour, setHeatmapHour] = useState(0)
   const onHourChange = useCallback((hour: number) => setHeatmapHour(hour), [])
+  const showHeatmap = useCallback(() => setHeatmapOn(true), [])
+  const hideHeatmap = useCallback(() => setHeatmapOn(false), [])
+  const toggleEditing = useCallback(() => setEditing((open) => !open), [])
+  const { mutate } = planTrip
+  const submitTrip = useCallback(
+    (request: TripPlanRequest) => {
+      setSelectedId(null)
+      setHeatmapHour(0)
+      mutate(request, { onSuccess: () => setEditing(false) })
+    },
+    [mutate],
+  )
 
   const plan = planTrip.data
   const routes = plan?.routes ?? []
@@ -56,7 +80,10 @@ export default function App() {
   const activeId = routes.some((route) => route.id === selectedId)
     ? selectedId
     : (plan?.recommendation.route_id ?? routes[0]?.id ?? null)
-  const { fields: serverErrors, general } = describeError(planTrip.error)
+  const { fields: serverErrors, general } = useMemo(
+    () => describeError(planTrip.error),
+    [planTrip.error],
+  )
   // All times are shown on the departure city's clock.
   const timeZone = plan?.trip.departure_timezone ?? browserTimeZone()
 
@@ -68,43 +95,41 @@ export default function App() {
       : null
   const heatmapStatus = heatmap.data
     ? 'ready'
-    : heatmap.isError
-      ? 'error'
-      : heatmap.failureCount > 0
-        ? 'busy'
-        : 'loading'
+    : weatherAllowanceUsedUp(heatmap.error)
+      ? 'used-up'
+      : heatmap.isError
+        ? 'error'
+        : heatmap.failureCount > 0
+          ? 'busy'
+          : 'loading'
 
   return (
     <div className={plan ? 'app app--planned' : 'app'}>
       <header className="app__header">
         <h1>Weather-Aware Truck Routing</h1>
-        <BackendStatus />
+        <Sidebar.BackendStatus />
       </header>
       <div className="app__body">
         <aside className="app__sidebar" aria-label="Trip planner">
           {plan && (
-            <TripSummary
+            <Sidebar.TripSummary
               plan={plan}
               editing={editing}
-              onToggleEditing={() => setEditing((open) => !open)}
+              onToggleEditing={toggleEditing}
               formId={TRIP_FORM_ID}
             />
           )}
-          <TripForm
+          <Sidebar.TripForm
             id={TRIP_FORM_ID}
             hidden={Boolean(plan) && !editing}
-            onSubmit={(request) => {
-              setSelectedId(null)
-              setHeatmapHour(0)
-              planTrip.mutate(request, { onSuccess: () => setEditing(false) })
-            }}
+            onSubmit={submitTrip}
             isSubmitting={planTrip.isPending}
             serverErrors={serverErrors}
             generalError={general}
           />
           {plan && (
             <>
-              <RouteList
+              <Sidebar.RouteList
                 routes={routes}
                 notes={plan.notes}
                 selectedId={activeId}
@@ -114,7 +139,11 @@ export default function App() {
                 recommendation={plan.recommendation}
               />
               {activeRoute && (
-                <CheckpointTable key={activeRoute.id} route={activeRoute} timeZone={timeZone} />
+                <Sidebar.CheckpointTable
+                  key={activeRoute.id}
+                  route={activeRoute}
+                  timeZone={timeZone}
+                />
               )}
             </>
           )}
@@ -151,10 +180,11 @@ export default function App() {
           {plan && (
             <HeatmapControl
               enabled={heatmapOn}
-              onEnable={() => setHeatmapOn(true)}
+              onEnable={showHeatmap}
+              onDisable={hideHeatmap}
               hour={heatmapHour}
               onHourChange={onHourChange}
-              hours={heatmap.data?.hours ?? 48}
+              hours={heatmap.data?.hours ?? HEATMAP_HOURS}
               startUtc={heatmapStart}
               timeZone={timeZone}
               status={heatmapStatus}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HeatmapResponse } from '../../api/types'
-import { cellRadiusStops, hasWeatherAt, heatmapFeatures } from './heatmapFeatures'
+import { cellLevelsAt, cellRadiusStops, hasWeatherAt, heatmapFeatures } from './heatmapFeatures'
 
 const HEATMAP: HeatmapResponse = {
   start_utc: '2026-10-21T15:00:00Z',
@@ -16,13 +16,18 @@ describe('heatmapFeatures', () => {
     expect(cell.geometry.coordinates).toEqual([-111.25, 35.25])
   })
 
-  it('stores every hour as a number property, -1 for no forecast', () => {
-    const [cell] = heatmapFeatures(HEATMAP).features
-    expect(cell.properties).toEqual({ h0: 0, h1: 2, h2: -1 })
+  it("numbers the cells so the map can set each one's level", () => {
+    expect(heatmapFeatures(HEATMAP).features.map((f) => f.id)).toEqual([0])
   })
 
   it('is empty without data', () => {
     expect(heatmapFeatures(undefined).features).toEqual([])
+  })
+})
+
+describe('cellLevelsAt', () => {
+  it("gives each cell's level at an hour as a number, -1 for no forecast", () => {
+    expect([0, 1, 2].map((hour) => cellLevelsAt(HEATMAP, hour))).toEqual([[0], [2], [-1]])
   })
 })
 

@@ -1,6 +1,10 @@
 import pytest
 
-from trips.services.weather_budget import WeatherBudget, WeatherBudgetExceeded
+from trips.services.weather_budget import (
+    WeatherAllowanceUsedUp,
+    WeatherBudget,
+    WeatherBudgetExceeded,
+)
 
 
 class Clock:
@@ -43,11 +47,11 @@ def test_the_hourly_and_daily_allowances_are_refused_not_waited_for():
     b = budget(clock, per_hour=150)
     b.acquire(100)
     clock.now += 60
-    with pytest.raises(WeatherBudgetExceeded, match="hourly"):
+    with pytest.raises(WeatherAllowanceUsedUp, match="hourly"):
         b.acquire(60)
 
     b = budget(Clock(), per_day=50, per_minute=100)
-    with pytest.raises(WeatherBudgetExceeded, match="daily"):
+    with pytest.raises(WeatherAllowanceUsedUp, match="daily"):
         b.acquire(60)
 
 
@@ -70,3 +74,30 @@ def test_gives_up_if_the_minute_never_frees_up_in_time():
     b.acquire(100)
     with pytest.raises(WeatherBudgetExceeded, match="busy"):
         b.acquire(10)
+
+
+def test_waiting_for_the_next_minute_does_not_block_other_requests():
+    clock = Clock()
+    b = budget(clock)
+    locked_while_sleeping = []
+
+    def sleep(seconds):
+        locked_while_sleeping.append(b._lock.locked())
+        clock.sleep(seconds)
+
+    b._sleep = sleep
+    b.acquire(80)
+    b.acquire(30)
+
+    assert locked_while_sleeping == [False]
+
+
+def test_a_busy_minute_is_not_reported_as_a_used_up_allowance():
+    clock = Clock()
+    b = WeatherBudget(
+        per_minute=100, per_hour=1_000, per_day=2_000, max_wait_s=5, clock=clock, sleep=clock.sleep
+    )
+    b.acquire(100)
+    with pytest.raises(WeatherBudgetExceeded) as raised:
+        b.acquire(10)
+    assert not isinstance(raised.value, WeatherAllowanceUsedUp)

@@ -8,6 +8,7 @@ const PLAY_STEP_MS = 500
 interface HeatmapControlProps {
   enabled: boolean
   onEnable: () => void
+  onDisable: () => void
   /** Hour index from the departure hour (0 … hours − 1). */
   hour: number
   onHourChange: (hour: number) => void
@@ -15,7 +16,7 @@ interface HeatmapControlProps {
   /** The departure hour, as UTC ISO. */
   startUtc: string
   timeZone: string
-  status: 'loading' | 'ready' | 'busy' | 'error'
+  status: 'loading' | 'ready' | 'busy' | 'used-up' | 'error'
   /** False when no cell is Moderate or worse at this hour. */
   hasWeather: boolean
 }
@@ -24,6 +25,7 @@ interface HeatmapControlProps {
 export function HeatmapControl({
   enabled,
   onEnable,
+  onDisable,
   hour,
   onHourChange,
   hours,
@@ -34,8 +36,8 @@ export function HeatmapControl({
 }: HeatmapControlProps) {
   const [playRequested, setPlayRequested] = useState(false)
   const lastHour = hours - 1
-  // Playback stops by itself at the last hour.
-  const playing = playRequested && hour < lastHour
+  // Playback stops by itself at the last hour, and whenever the map is hidden.
+  const playing = enabled && playRequested && hour < lastHour
 
   // Playing advances one hour every half second.
   useEffect(() => {
@@ -90,10 +92,22 @@ export function HeatmapControl({
             onHourChange(Number(event.target.value))
           }}
         />
+        <button
+          type="button"
+          className="heatmap-control__hide"
+          onClick={() => {
+            setPlayRequested(false)
+            onDisable()
+          }}
+        >
+          Hide
+        </button>
       </div>
       <p className="heatmap-control__status" aria-live={playing ? 'off' : 'polite'}>
         {status === 'loading' && 'Loading weather map…'}
         {status === 'busy' && 'The weather map is busy. Retrying shortly…'}
+        {status === 'used-up' &&
+          'The free weather allowance is used up for now. The map will work again later.'}
         {status === 'error' && 'The weather map is unavailable right now.'}
         {ready && (
           <>

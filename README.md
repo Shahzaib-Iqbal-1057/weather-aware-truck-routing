@@ -64,8 +64,12 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 |---|---|---|
 | GET | `/api/health/` | Liveness check |
 | GET | `/api/geocode/?q=` | US place autocomplete (cities, addresses, businesses) via TomTom Search. Cached for 24 h and rate limited, so the shared API quota is protected. |
-| POST | `/api/trips/heatmap/` | Weather map for a planned trip (same body as the plan): risk level in every corridor cell for each of the 48 hours after departure. Requested separately so the routes never wait for it. |
-| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops, the forecast and risk level at every checkpoint, per-route risk totals, the Moderate-or-worse stretches of each route for the map, and the recommended route with its reason (routes cached 15 min, weather 30 min, rate limited). |
+| POST | `/api/trips/heatmap/` | Weather map for a planned trip (same body as the plan): risk level in every corridor cell for every hour from departure to 48 hours after it. Requested separately so the routes never wait for it. |
+| POST | `/api/trips/plan/` | Validates the trip and returns up to 3 candidate truck routes, each with checkpoints, ETAs, required driver stops, the forecast and risk level at every checkpoint, per-route risk totals, the Moderate-or-worse stretches of each route for the map, and the recommended route with its reason (routes cached 1 h, weather 30 min, rate limited). |
+
+Rate limits identify a client by the address its connection comes from, not by a header it can set
+itself. Behind a host's load balancer, `DJANGO_NUM_PROXIES` says how many proxies to trust (see
+`.env.example`).
 
 ## How candidate routes are chosen
 
@@ -141,7 +145,8 @@ further out).
 - **Rain = rain + showers.** Open-Meteo reports steady (stratiform) rain and convective showers
   separately; both fall on the road, and thunderstorm showers are where the dangerous rates come
   from, so they are added, not averaged.
-- **Wind = sustained wind at 10 m** for the risk rules; gusts are shown for information.
+- **Wind = sustained wind at 10 m** for the risk rules, as in the brief; gusts are shown, and only
+  very strong ones (55 mph or more) change the level (see the gust safeguard below).
 - **Missing data is unknown, never calm.** An hour with any missing risk value is treated as "no
   forecast" for that checkpoint.
 - **Fewer requests:** checkpoints are snapped to a 0.05° (~5 km) grid, so checkpoints of different
@@ -169,7 +174,7 @@ Each checkpoint's forecast is classified with the brief's risk table and load ru
 - **Load rules** use sustained wind and the cargo weight: 45–54 mph with cargo over 30,000 lb is
   No Travel; 35–44 mph with cargo over 40,000 lb is Severe. "Over" is strict: exactly 30,000 lb
   does not trigger the first rule.
-- **Gust safeguard (our addition):** gusts of 55 mph or more raise the wind level to at least High.
+- **Gust safeguard (my addition):** gusts of 55 mph or more raise the wind level to at least High.
   The brief's table says only "wind"; we classify sustained wind as the table describes, but it is
   gusts that push high-sided trucks over, so a dangerous gust is never reported as Low or Moderate.
   It raises to High rather than No Travel because a gust is a burst, not a constant force.
@@ -200,7 +205,9 @@ Travel time is door-to-door, including the required driver stops.
 2. Fewest **Severe miles**, then fewest **High miles**, compared exactly.
 3. Lowest **average risk**, where a route counts as tied with the best if it is within **one
    checkpoint's worth**: 10 miles at one level higher, i.e. 10 ÷ the route's length in miles
-   (0.036 on a 277-mile trip, 0.0125 on an 800-mile one).
+   (0.036 on a 277-mile trip, 0.0125 on an 800-mile one). On trips under 40 miles one checkpoint
+   is a large share of the route, so the margin is capped at a quarter of a level: a route that is
+   Moderate end to end is never "practically the same" as one that is Low.
 4. The **fastest** of the routes still tied.
 
 The app shows the result as a "Recommended" badge, selects that route on the map, and gives a
@@ -246,7 +253,7 @@ and when the weather is practically the same, the fastest route wins.
   for its ETA, weather and the rule that set the level. Zoomed out, 10-mile dots would overlap, so
   only every fifth Low dot is drawn (anything above Low always is).
 - **Checkpoint details:** the same information as a table under the route list (with the driver's
-  required stops in between), filterable to the checkpoints above Low. It works without a mouse,
+  required stops in between), filterable to Moderate or worse. It works without a mouse,
   with a screen reader, and is quicker to scan than hovering dots.
 - After planning, the form folds into a one-line trip summary ("Change trip" opens it again), so
   the recommendation and routes come first. On phones the map sits on top and the planner scrolls
@@ -277,22 +284,29 @@ sits in a colored area, that is when the truck drives through it. The map also s
 - **Soft cells:** each cell is drawn as a blurred disc about one cell wide, so neighbouring cells
   blend into a radar-like field instead of a grid of squares. The forecast is still per cell; the
   blur only hides the grid.
-- **Smooth by construction:** every cell carries all 48 hourly levels, so moving the slider only
-  changes which hour the map colors by. No data is re-sent and no request is made.
-- **Loaded on demand** ("Show weather map"): it costs one weather location per cell, so trips where
-  nobody opens it cost half as much.
+- **Smooth by construction:** the browser gets every hour's level for every cell in one response.
+  Moving the slider sets each cell's level for that hour as MapLibre *feature state*, which only
+  repaints the map: no request, no data re-sent, and no re-tiling. The sidebar doesn't re-render
+  on slider steps, and the truck marker is moved rather than rebuilt.
+- **Loaded on demand** ("Show weather map", and "Hide" to turn it off again): it costs one weather
+  location per cell, so trips where nobody opens it cost half as much.
+- **Still works after a while:** the map can be opened long after planning, even once a "leave
+  now" departure has passed; it uses the same cached routes as the plan.
 
 **Staying inside the free weather tier.** Open-Meteo's free tier allows 600 locations per minute,
 5,000 per hour and 10,000 per day, and every location in a batched request counts. All weather
 requests go through one budget on the server: a request that would exceed the current minute waits
 for the next one, and one that would exceed the hour or day is refused, so the app shows "weather
-unavailable" rather than failing. When less than four maps' worth of the day's allowance is left,
-the weather map uses a coarser grid. The counter lives in the server process's memory, so the app is
-deployed as a single process. Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0).
+unavailable" rather than failing. A request waiting for the next minute doesn't hold up the
+others. The weather map tells "busy, retrying shortly" apart from "allowance used up for now", and
+only retries the first. When less than four maps' worth of the day's allowance is left, the weather
+map uses a coarser grid. The counter lives in the server process's memory, so the app is deployed as
+a single process. Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0).
 
 ## Assumptions
 
-- Region: United States only.
+- Region: United States only (lower 48, Alaska and Hawaii). Autocomplete only offers US places,
+  and the API rejects others.
 - **"Load weight" is the cargo (freight) weight**, 0–45,000 lb. An empty tractor with a 53 ft
   trailer already weighs about 35,000 lb, so if the input meant the whole truck, every semi would
   be over the brief's 30,000 lb threshold and the load rules would no longer distinguish light
@@ -316,7 +330,7 @@ deployed as a single process. Weather data by [Open-Meteo.com](https://open-mete
   truck speed cap (a 65 mph limiter rule was proposed and withdrawn in July 2025), but most large
   fleets use speed limiters and 65 mph is a common setting. Without a cap, routed truck speeds follow
   posted limits of up to 75–80 mph. The cap makes ETAs conservative.
-- Wind risk uses sustained wind speed; gusts are shown for information.
+- Wind risk uses sustained wind speed; gusts only count from 55 mph (raised to at least High).
 - The driver is driving solo and starts the trip fresh (no hours already used that day or week);
   weekly 60/70-hour limits are not modelled.
 

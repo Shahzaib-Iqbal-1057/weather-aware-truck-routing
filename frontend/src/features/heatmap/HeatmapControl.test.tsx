@@ -3,24 +3,27 @@ import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HeatmapControl } from './HeatmapControl'
 
-type Status = 'loading' | 'ready' | 'busy' | 'error'
+type Status = 'loading' | 'ready' | 'busy' | 'used-up' | 'error'
 
 function Harness({
   enabled = true,
   status = 'ready',
   hours = 4,
   onEnable = () => {},
+  onDisable = () => {},
 }: {
   enabled?: boolean
   status?: Status
   hours?: number
   onEnable?: () => void
+  onDisable?: () => void
 }) {
   const [hour, setHour] = useState(0)
   return (
     <HeatmapControl
       enabled={enabled}
       onEnable={onEnable}
+      onDisable={onDisable}
       hour={hour}
       onHourChange={setHour}
       hours={hours}
@@ -41,6 +44,18 @@ describe('HeatmapControl', () => {
     render(<Harness enabled={false} onEnable={onEnable} />)
     fireEvent.click(screen.getByRole('button', { name: 'Show weather map (next 48 h)' }))
     expect(onEnable).toHaveBeenCalled()
+  })
+
+  it('can be hidden again', () => {
+    const onDisable = vi.fn()
+    render(<Harness onDisable={onDisable} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }))
+    expect(onDisable).toHaveBeenCalled()
+  })
+
+  it('says when the free weather allowance is used up', () => {
+    render(<Harness status="used-up" />)
+    expect(screen.getByText(/free weather allowance is used up/)).toBeInTheDocument()
   })
 
   it('shows the hour on the departure clock and says when nothing is happening', () => {

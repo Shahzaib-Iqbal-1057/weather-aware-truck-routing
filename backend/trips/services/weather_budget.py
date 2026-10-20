@@ -21,7 +21,11 @@ MINUTE, HOUR, DAY = 60, 3600, 86_400
 
 
 class WeatherBudgetExceeded(ProviderError):
-    """The hourly or daily allowance is used up (or the minute did not free up in time)."""
+    """The minute's allowance did not free up in time: worth retrying shortly."""
+
+
+class WeatherAllowanceUsedUp(WeatherBudgetExceeded):
+    """The hourly or daily allowance is used up: retrying soon will not help."""
 
 
 class WeatherBudget:
@@ -51,13 +55,15 @@ class WeatherBudget:
         if locations > self.batch_limit:
             raise ValueError(f"Split requests to at most {self.batch_limit} locations.")
         waited = 0.0
-        with self._lock:
-            while True:
+        while True:
+            # The lock is held only to check and record, never while sleeping, so other
+            # requests (and remaining_today) are not stuck behind one that waits.
+            with self._lock:
                 now = self._clock()
                 for window in (DAY, HOUR):
                     if self._count(window, now) + locations > self.limits[window]:
                         period = "daily" if window == DAY else "hourly"
-                        raise WeatherBudgetExceeded(f"The {period} weather allowance is used up.")
+                        raise WeatherAllowanceUsedUp(f"The {period} weather allowance is used up.")
                 if self._count(MINUTE, now) + locations <= self.limits[MINUTE]:
                     for window in self.limits:
                         key = (window, int(now // window))
@@ -65,10 +71,10 @@ class WeatherBudget:
                     self._forget_old(now)
                     return
                 wait = MINUTE - now % MINUTE + 0.5
-                if waited + wait > self.max_wait_s:
-                    raise WeatherBudgetExceeded("The weather service is busy; try again shortly.")
-                self._sleep(wait)
-                waited += wait
+            if waited + wait > self.max_wait_s:
+                raise WeatherBudgetExceeded("The weather service is busy; try again shortly.")
+            self._sleep(wait)
+            waited += wait
 
     def remaining_today(self) -> int:
         with self._lock:

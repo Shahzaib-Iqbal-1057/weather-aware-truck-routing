@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from trips.api.serializers import (
     GeocodeQuerySerializer,
     PlaceSerializer,
+    TripHeatmapRequestSerializer,
     TripPlanRequestSerializer,
     serialize_heatmap,
     serialize_plan,
@@ -17,7 +18,7 @@ from trips.providers.base import NoRouteError, ProviderError
 from trips.services.geocoding import search_places
 from trips.services.heatmap import build_heatmap
 from trips.services.plan_trip import plan_trip
-from trips.services.weather_budget import WeatherBudgetExceeded
+from trips.services.weather_budget import WeatherAllowanceUsedUp, WeatherBudgetExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ class TripHeatmapView(APIView):
     throttle_scope = "heatmap"
 
     def post(self, request: Request) -> Response:
-        serializer = TripPlanRequestSerializer(data=request.data)
+        serializer = TripHeatmapRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
             heatmap = build_heatmap(serializer.validated_data["trip"])
@@ -90,6 +91,15 @@ class TripHeatmapView(APIView):
             return Response(
                 {"detail": "No truck route exists between these places."},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        except WeatherAllowanceUsedUp:
+            # No Retry-After: the allowance resets on the hour or at midnight UTC, not in a minute.
+            return Response(
+                {
+                    "detail": "The free weather allowance is used up for now.",
+                    "code": "weather_allowance_used_up",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         except WeatherBudgetExceeded:
             return Response(

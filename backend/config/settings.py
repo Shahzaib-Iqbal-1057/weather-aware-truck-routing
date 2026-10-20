@@ -53,6 +53,10 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
     # Protects the shared TomTom daily quota from a single client hammering the API.
     "DEFAULT_THROTTLE_RATES": {"geocode": "120/min", "plan": "20/min", "heatmap": "20/min"},
+    # Number of trusted reverse proxies in front of the app. Throttles identify clients by the
+    # address the last trusted proxy saw; with 0 they use the socket address, so a client can't
+    # dodge the limits by sending its own X-Forwarded-For header.
+    "NUM_PROXIES": int(os.environ.get("DJANGO_NUM_PROXIES", "0")),
 }
 
 LANGUAGE_CODE = "en-us"

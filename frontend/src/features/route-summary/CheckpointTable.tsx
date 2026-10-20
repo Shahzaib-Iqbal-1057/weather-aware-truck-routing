@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { RouteResult } from '../../api/types'
+import type { Checkpoint, RouteResult } from '../../api/types'
 import { formatClock, formatDuration, formatWeather } from '../../lib/format'
 import { riskStyle } from '../../lib/risk'
 import './CheckpointTable.css'
@@ -8,6 +8,10 @@ interface CheckpointTableProps {
   route: RouteResult
   /** Times are shown on the departure city's clock. */
   timeZone: string
+}
+
+function isRisky(checkpoint: Checkpoint): boolean {
+  return checkpoint.risk.level !== 'low' && checkpoint.risk.level !== 'unknown'
 }
 
 type Row =
@@ -25,9 +29,7 @@ export function CheckpointTable({ route, timeZone }: CheckpointTableProps) {
     ...route.rest_stops.map((s, index) => ({ kind: 'stop' as const, mile: s.mile, index })),
   ].sort((a, b) => a.mile - b.mile)
   const shown = riskyOnly
-    ? rows.filter(
-        (row) => row.kind === 'checkpoint' && route.checkpoints[row.index].risk.level !== 'low',
-      )
+    ? rows.filter((row) => row.kind === 'checkpoint' && isRisky(route.checkpoints[row.index]))
     : rows
 
   return (
@@ -41,10 +43,10 @@ export function CheckpointTable({ route, timeZone }: CheckpointTableProps) {
           checked={riskyOnly}
           onChange={(event) => setRiskyOnly(event.target.checked)}
         />
-        Only show checkpoints above Low
+        Only show Moderate or worse
       </label>
       {shown.length === 0 ? (
-        <p className="checkpoint-table__empty">Every checkpoint on this route is Low risk.</p>
+        <p className="checkpoint-table__empty">No checkpoint on this route is Moderate or worse.</p>
       ) : (
         <div className="checkpoint-table__scroll">
           <table>

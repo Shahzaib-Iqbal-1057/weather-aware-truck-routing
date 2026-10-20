@@ -77,6 +77,13 @@ def test_the_margin_is_one_checkpoint_on_that_routes_own_length():
     )
 
 
+def test_on_short_trips_the_margin_is_at_most_a_quarter_level():
+    # 8 miles: one checkpoint would be 10/8 = 1.25 levels. All-Moderate vs all-Low is not a tie.
+    choice, _ = pick(totals(0.2, average=1.0, length=8), totals(0.25, average=0.0, length=8))
+    assert choice == "B"
+    assert pick(totals(0.2, average=0.2, length=8), totals(0.25, average=0.0, length=8))[0] == "A"
+
+
 def test_no_travel_routes_are_never_recommended():
     choice, reason = pick(totals(10, no_travel=10), totals(11, high=20))
     assert choice == "B"

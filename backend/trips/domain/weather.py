@@ -22,7 +22,7 @@ class HourlyWeather:
 
     hour: datetime  # end of the forecast hour (UTC); rain/snow cover the hour before it
     wind_mph: float  # sustained wind at 10 m, used by the risk rules
-    gust_mph: float | None  # shown for information only
+    gust_mph: float | None  # shown, and 55+ mph raises the wind level to at least High
     rain_in_per_hr: float
     snow_in_per_hr: float
     temperature_f: float | None

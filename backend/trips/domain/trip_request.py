@@ -21,10 +21,21 @@ SPACING_OPTIONS_MI = (10, 25, 50)
 # enough points to batch into one weather request. 25 and 50 stay accepted by the API.
 DEFAULT_SPACING_MI = 10
 MIN_TRIP_MILES = 1.0
+# Rough boxes around the lower 48, Alaska and Hawaii (south, north, west, east). Autocomplete only
+# offers US places; this stops a direct API call routing, say, Paris to Berlin. The boxes also
+# take in border strips of Canada and Mexico, which the router handles fine.
+US_BOXES = (
+    (24.4, 49.5, -125.0, -66.9),
+    (51.0, 71.5, -180.0, -129.9),
+    (18.9, 22.3, -160.3, -154.8),
+)
 
 MAX_DEPARTURE_AHEAD = timedelta(days=7)
 RELIABLE_FORECAST_HORIZON = timedelta(hours=48)
 PAST_DEPARTURE_GRACE = timedelta(minutes=15)
+# The weather map is requested for a trip that was already planned, possibly a while ago, so a
+# departure that has since passed is still a valid trip to show.
+PLANNED_TRIP_PAST_GRACE = timedelta(hours=24)
 
 
 @dataclass(frozen=True)
@@ -39,6 +50,10 @@ class TripRequest:
     @property
     def departure_local(self) -> datetime:
         return self.departure_utc.astimezone(ZoneInfo(self.departure_timezone))
+
+
+def _in_us(place: Place) -> bool:
+    return any(s <= place.lat <= n and w <= place.lon <= e for s, n, w, e in US_BOXES)
 
 
 class TripValidationError(Exception):
@@ -57,6 +72,7 @@ def build_trip_request(
     origin_timezone: str | None,
     destination_timezone: str | None,
     now: datetime,
+    past_grace: timedelta = PAST_DEPARTURE_GRACE,
 ) -> tuple[TripRequest, list[str]]:
     """Validate the input and return the trip plus any non-blocking warnings.
 
@@ -67,6 +83,9 @@ def build_trip_request(
 
     if origin_timezone is None:
         errors["origin"] = "Could not determine the time zone for this origin."
+    for field, place in (("origin", origin), ("destination", destination)):
+        if not _in_us(place):
+            errors[field] = "Only places in the United States are supported."
 
     if haversine_miles(origin.lat, origin.lon, destination.lat, destination.lon) < MIN_TRIP_MILES:
         errors["destination"] = "Destination must be a different place from the origin."
@@ -92,7 +111,7 @@ def build_trip_request(
             errors["departure_local"] = (
                 "That time is skipped when clocks change for daylight saving. Choose another time."
             )
-        elif departure_utc < now - PAST_DEPARTURE_GRACE:
+        elif departure_utc < now - past_grace:
             errors["departure_local"] = "Departure time is in the past."
         elif departure_utc > now + MAX_DEPARTURE_AHEAD:
             errors["departure_local"] = "Departure must be within the next 7 days."

@@ -24,7 +24,8 @@ from trips.services.weather import weather_at
 
 logger = logging.getLogger(__name__)
 
-ROUTE_CACHE_SECONDS = 15 * 60
+# Long enough that a weather map opened well after planning uses the same routes as the plan.
+ROUTE_CACHE_SECONDS = 60 * 60
 # TomTom's response time grows with each alternative (NYC→Chicago: ~11 s for 3, ~22 s for 5).
 # 3 alternatives (4 routes) was enough for the selection in testing; the fallback covers the rest.
 REQUESTED_ALTERNATIVES = 3

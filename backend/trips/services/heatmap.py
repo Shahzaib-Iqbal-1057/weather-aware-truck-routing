@@ -1,5 +1,5 @@
-"""Stage 8: the weather map, i.e. risk in every corridor cell for each of the 48 hours after
-departure. Uses the trip's cargo, so it shows the same levels as the checkpoints."""
+"""Stage 8: the weather map, i.e. risk in every corridor cell for every hour from departure to
+48 hours after it. Uses the trip's cargo, so it shows the same levels as the checkpoints."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -16,7 +16,7 @@ from trips.services.plan_trip import trip_routes
 from trips.services.weather import hourly_records
 from trips.services.weather_budget import get_budget
 
-HOURS = 48
+HOURS = 49  # the departure hour and each of the 48 after it (a 0–48 h slider)
 # When less than this many days' worth of the cap is left in today's free allowance, use a quarter
 # of the cells (one size coarser), so the map keeps working instead of exhausting the allowance.
 LOW_DAILY_BUDGET_MAPS = 4

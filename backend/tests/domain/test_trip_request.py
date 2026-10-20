@@ -75,6 +75,20 @@ def test_rejects_unsupported_spacings(spacing_mi):
     assert "spacing_mi" in errors_of(spacing_mi=spacing_mi)
 
 
+def test_rejects_places_outside_the_us():
+    paris = Place(label="Paris", lat=48.86, lon=2.35)
+    assert errors_of(origin=paris, origin_timezone="Europe/Paris")["origin"] == (
+        "Only places in the United States are supported."
+    )
+
+
+@pytest.mark.parametrize(
+    ("lat", "lon"), [(61.22, -149.90), (21.31, -157.86), (25.76, -80.19), (48.75, -122.48)]
+)
+def test_accepts_alaska_hawaii_and_the_edges_of_the_lower_48(lat, lon):
+    build(destination=Place(label="Somewhere, US", lat=lat, lon=lon))
+
+
 def test_rejects_same_origin_and_destination():
     nearby = Place(label="Denver Civic Center", lat=39.7400, lon=-104.9910)
     assert "destination" in errors_of(destination=nearby)

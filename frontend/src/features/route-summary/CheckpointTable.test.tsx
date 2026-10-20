@@ -19,7 +19,7 @@ const ROUTE = makeRoute({
   checkpoints: [
     checkpoint(0, 'low'),
     checkpoint(10, 'high', ['Gusts 57.3 mph']),
-    checkpoint(20, 'low'),
+    checkpoint(20, 'unknown'),
   ],
   rest_stops: [
     {
@@ -45,10 +45,10 @@ describe('CheckpointTable', () => {
     expect(rows()[2]).toHaveTextContent('30 min break (until Tue 5:30 PM CDT)')
   })
 
-  it('can show only the checkpoints above Low', () => {
+  it('can show only the checkpoints at Moderate or worse', () => {
     render(<CheckpointTable route={ROUTE} timeZone="UTC" />)
 
-    fireEvent.click(screen.getByLabelText('Only show checkpoints above Low'))
+    fireEvent.click(screen.getByLabelText('Only show Moderate or worse'))
 
     expect(rows().map((row) => row.cells[0].textContent)).toEqual(['10'])
   })

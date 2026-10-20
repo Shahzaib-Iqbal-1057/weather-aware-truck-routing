@@ -1,25 +1,29 @@
 import type { Feature, FeatureCollection, Point } from 'geojson'
 import type { HeatmapResponse } from '../../api/types'
 
-/** Per-hour level as a number (`h0` … `h47`): 0 Low … 4 No Travel, -1 no forecast. */
-export type CellProperties = Record<string, number>
-
-/** One point per cell with every hour's level, so moving the slider only restyles them. */
-export function heatmapFeatures(
-  heatmap: HeatmapResponse | undefined,
-): FeatureCollection<Point, CellProperties> {
+/**
+ * One point per cell, with the cell's index as its id. The map sets each cell's level for the
+ * shown hour as feature state (see cellLevelsAt), so moving the slider never re-sends data.
+ */
+export function heatmapFeatures(heatmap: HeatmapResponse | undefined): FeatureCollection<Point> {
   if (!heatmap) return { type: 'FeatureCollection', features: [] }
   return {
     type: 'FeatureCollection',
-    features: heatmap.cells.map((cell): Feature<Point, CellProperties> => {
-      const properties: CellProperties = {}
-      for (let hour = 0; hour < cell.levels.length; hour++) {
-        const code = cell.levels[hour]
-        properties[`h${hour}`] = code === '-' ? -1 : Number(code)
-      }
-      return { type: 'Feature', properties, geometry: { type: 'Point', coordinates: cell.center } }
-    }),
+    features: heatmap.cells.map((cell, id): Feature<Point> => ({
+      type: 'Feature',
+      id,
+      properties: {},
+      geometry: { type: 'Point', coordinates: cell.center },
+    })),
   }
+}
+
+/** Each cell's level at `hour`, in cell (feature id) order: 0 Low … 4 No Travel, -1 no forecast. */
+export function cellLevelsAt(heatmap: HeatmapResponse, hour: number): number[] {
+  return heatmap.cells.map((cell) => {
+    const code = cell.levels[hour] ?? '-'
+    return code === '-' ? -1 : Number(code)
+  })
 }
 
 // MapLibre's world is 512 px wide at zoom 0 and doubles with each zoom level.

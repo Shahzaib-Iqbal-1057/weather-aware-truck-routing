@@ -12,7 +12,12 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { useEffect, useRef, useState } from 'react'
 import type { HeatmapResponse, Place, RouteId, RouteResult } from '../../api/types'
-import { CELL_RADIUS_MAX_ZOOM, cellRadiusStops, heatmapFeatures } from '../heatmap/heatmapFeatures'
+import {
+  CELL_RADIUS_MAX_ZOOM,
+  cellLevelsAt,
+  cellRadiusStops,
+  heatmapFeatures,
+} from '../heatmap/heatmapFeatures'
 import {
   checkpointFeatures,
   endpointFeatures,
@@ -66,10 +71,18 @@ const ENDPOINTS_SOURCE = 'endpoints'
 const CHECKPOINTS_SOURCE = 'checkpoints'
 const REST_STOPS_SOURCE = 'rest-stops'
 const RISK_STRETCHES_SOURCE = 'risk-stretches'
-const ROUTE_LINE_LAYER = 'route-line'
-const RISK_STRETCH_LAYER = 'route-risk'
+// Each route is drawn as a white casing, its line, and its risk stretches inside the line. The
+// alternatives come first and the selected route last, so on road two routes share, only the
+// selected route's own risk shows.
+const ROUTE_GROUPS = [
+  { key: 'alternative', selected: false, color: ROUTE_ALTERNATIVE_COLOR, widths: [7.5, 5, 3] },
+  { key: 'selected', selected: true, color: ROUTE_SELECTED_COLOR, widths: [10, 7, 4.5] },
+] as const
 // Clicking a route's line, or the risk drawn on it, selects that route.
-const ROUTE_CLICK_LAYERS = [ROUTE_LINE_LAYER, RISK_STRETCH_LAYER]
+const ROUTE_CLICK_LAYERS = ROUTE_GROUPS.flatMap((group) => [
+  `route-line-${group.key}`,
+  `route-risk-${group.key}`,
+])
 const CHECKPOINT_LAYER = 'checkpoint-dots'
 const CHECKPOINT_SPARSE_LAYER = 'checkpoint-dots-sparse'
 // Below this zoom 10-mile dots overlap, so only some are drawn (see checkpointFeatures).
@@ -85,8 +98,6 @@ const RISK_COLOR_BY_LEVEL = [
 const LABELLED_LAYERS = [REST_STOP_LAYER, CHECKPOINT_LAYER, CHECKPOINT_SPARSE_LAYER]
 // Pixels around the pointer that count as "on" a point, so the small dots are easy to hit.
 const HOVER_RADIUS_PX = 8
-// Draw the selected route above the others.
-const SELECTED_FIRST: ExpressionSpecification = ['case', ['get', 'selected'], 1, 0]
 // Worse weather is drawn on top where dots or stretches overlap.
 const WORSE_FIRST = [
   'match',
@@ -94,21 +105,16 @@ const WORSE_FIRST = [
   ...RISK_LEVELS.flatMap((level, i) => [level.key, level.key === 'unknown' ? -1 : i]),
   0,
 ] as unknown as ExpressionSpecification
-// The route line is wider than the risk drawn on it, so the route's own colour (blue when
-// selected, gray otherwise) still frames a risky stretch.
-const LINE_WIDTH: ExpressionSpecification = ['case', ['get', 'selected'], 7, 5]
-const RISK_WIDTH: ExpressionSpecification = ['case', ['get', 'selected'], 4.5, 3]
-const CASING_WIDTH: ExpressionSpecification = ['case', ['get', 'selected'], 10, 7.5]
 
-/** Fill colour for the given hour: each cell carries every hour's level as `h0` … `h47`. */
-function heatmapColorAt(hour: number): ExpressionSpecification {
-  return [
-    'match',
-    ['get', `h${hour}`],
-    ...RISK_LEVELS.slice(1, 5).flatMap((level, i) => [i + 1, level.color]),
-    'rgba(0, 0, 0, 0)',
-  ] as unknown as ExpressionSpecification
-}
+// Each cell's colour comes from its `level` feature state (1 Moderate … 4 No Travel), which the
+// slider sets per hour. Changing feature state only repaints; changing a data-driven paint
+// property would re-tile the source on every step.
+const HEATMAP_COLOR = [
+  'match',
+  ['to-number', ['coalesce', ['feature-state', 'level'], -1]],
+  ...RISK_LEVELS.slice(1, 5).flatMap((level, i) => [i + 1, level.color]),
+  'rgba(0, 0, 0, 0)',
+] as unknown as ExpressionSpecification
 
 export function RouteMap({
   routes,
@@ -193,23 +199,37 @@ export function RouteMap({
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !isReady) return
-    map.setPaintProperty(HEATMAP_LAYER, 'circle-color', heatmapColorAt(heatmapHour))
-  }, [isReady, heatmapHour])
+    if (!map || !isReady || !heatmap) return
+    cellLevelsAt(heatmap, heatmapHour).forEach((level, id) => {
+      map.setFeatureState({ source: HEATMAP_SOURCE, id }, { level })
+    })
+  }, [isReady, heatmap, heatmapHour])
 
-  // The truck at the weather map's hour.
+  // The truck at the weather map's hour: one marker, moved as the hour changes.
+  const truckRef = useRef<Marker | null>(null)
+  const showTruck = truckPosition !== null
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !isReady || !truckPosition) return
+    if (!isReady || !showTruck) return
     const element = document.createElement('div')
     element.className = 'truck-marker'
     element.title = 'Truck at this hour'
     element.textContent = '🚚'
-    const marker = new Marker({ element }).setLngLat(truckPosition).addTo(map)
+    truckRef.current = new Marker({ element })
     return () => {
-      marker.remove()
+      truckRef.current?.remove()
+      truckRef.current = null
     }
-  }, [isReady, truckPosition])
+  }, [isReady, showTruck])
+
+  const [truckLon, truckLat] = truckPosition ?? [null, null]
+  useEffect(() => {
+    const map = mapRef.current
+    const marker = truckRef.current
+    if (!map || !marker || truckLon === null || truckLat === null) return
+    marker.setLngLat([truckLon, truckLat])
+    // Added once it has a position; after that it only moves (addTo would re-attach it).
+    if (!marker.getElement().isConnected) marker.addTo(map)
+  }, [isReady, showTruck, truckLon, truckLat])
 
   // One clickable bubble per route ("A · 12 h 30 min"), on road no other route uses.
   useEffect(() => {
@@ -273,7 +293,7 @@ function addRouteLayers(map: MapLibreMap) {
     type: 'circle',
     source: HEATMAP_SOURCE,
     paint: {
-      'circle-color': heatmapColorAt(0),
+      'circle-color': HEATMAP_COLOR,
       'circle-radius': heatmapRadius(undefined),
       'circle-blur': HEATMAP_BLUR,
       'circle-opacity': HEATMAP_OPACITY,
@@ -286,35 +306,38 @@ function addRouteLayers(map: MapLibreMap) {
   map.addSource(CHECKPOINTS_SOURCE, { type: 'geojson', data: checkpointFeatures(null, 'UTC') })
   map.addSource(REST_STOPS_SOURCE, { type: 'geojson', data: restStopFeatures(null, 'UTC') })
 
-  map.addLayer({
-    id: 'route-casing',
-    type: 'line',
-    source: ROUTES_SOURCE,
-    layout: { 'line-join': 'round', 'line-cap': 'round', 'line-sort-key': SELECTED_FIRST },
-    paint: { 'line-color': ROUTE_CASING_COLOR, 'line-width': CASING_WIDTH },
-  })
-  map.addLayer({
-    id: ROUTE_LINE_LAYER,
-    type: 'line',
-    source: ROUTES_SOURCE,
-    layout: { 'line-join': 'round', 'line-cap': 'round', 'line-sort-key': SELECTED_FIRST },
-    paint: {
-      'line-color': ['case', ['get', 'selected'], ROUTE_SELECTED_COLOR, ROUTE_ALTERNATIVE_COLOR],
-      'line-width': LINE_WIDTH,
-    },
-  })
-  map.addLayer({
-    id: RISK_STRETCH_LAYER,
-    type: 'line',
-    source: RISK_STRETCHES_SOURCE,
-    layout: {
-      'line-join': 'round',
-      'line-cap': 'round',
-      // Selected route above the others, then worse weather above milder.
-      'line-sort-key': ['+', ['*', SELECTED_FIRST, 10], WORSE_FIRST],
-    },
-    paint: { 'line-color': RISK_COLOR_BY_LEVEL, 'line-width': RISK_WIDTH },
-  })
+  const lineLayout = { 'line-join': 'round', 'line-cap': 'round' } as const
+  for (const { key, selected, color, widths } of ROUTE_GROUPS) {
+    // The line is wider than the risk drawn inside it, so the route's own colour still frames a
+    // risky stretch and says which route it belongs to.
+    const [casingWidth, lineWidth, riskWidth] = widths
+    const filter: ExpressionSpecification = ['==', ['get', 'selected'], selected]
+    map.addLayer({
+      id: `route-casing-${key}`,
+      type: 'line',
+      source: ROUTES_SOURCE,
+      filter,
+      layout: lineLayout,
+      paint: { 'line-color': ROUTE_CASING_COLOR, 'line-width': casingWidth },
+    })
+    map.addLayer({
+      id: `route-line-${key}`,
+      type: 'line',
+      source: ROUTES_SOURCE,
+      filter,
+      layout: lineLayout,
+      paint: { 'line-color': color, 'line-width': lineWidth },
+    })
+    map.addLayer({
+      id: `route-risk-${key}`,
+      type: 'line',
+      source: RISK_STRETCHES_SOURCE,
+      filter,
+      // Worse weather above milder where stretches overlap.
+      layout: { ...lineLayout, 'line-sort-key': WORSE_FIRST },
+      paint: { 'line-color': RISK_COLOR_BY_LEVEL, 'line-width': riskWidth },
+    })
+  }
   const checkpointPaint = {
     'circle-radius': 4.5,
     'circle-color': RISK_COLOR_BY_LEVEL,
