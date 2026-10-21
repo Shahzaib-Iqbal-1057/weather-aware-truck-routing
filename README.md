@@ -1,7 +1,83 @@
 # Weather-Aware Truck Routing
 
-A React + Django app that helps a truck driver choose the safest route based on weather, load weight
-and travel time.
+A React + Django app that helps a truck driver pick the safest route. For a trip between two US
+places, it finds up to three truck-legal routes and checks the forecast every 10 miles **for the
+hour the truck will actually be there**, including required driver breaks. It rates each stretch
+by the brief's risk rules, adjusted for the cargo weight, and recommends a route with a one-line
+reason. A weather map shows how conditions along the corridor change over the next 48 hours.
+
+- **Live app:** https://weather-aware-truck-routing.fly.dev
+- **Video walkthrough (Loom):** https://www.loom.com/share/13ae94171ddd4bf4863091338344cb14
+
+![The app planning a trip from Las Vegas to Flagstaff, with two routes, a recommendation and the weather map](docs/screenshot.png)
+
+*Las Vegas → Flagstaff, leaving at 6 PM with 42,000 lb of cargo. The fastest route (A) runs into
+Severe weather near Flagstaff, so the app recommends Route B and says why. The weather map shows
+the storm at 10 PM and where the truck would be at that hour.*
+
+## How it works
+
+1. **Routes.** TomTom's truck routing (with the truck's weight and dimensions) returns candidate
+   routes. I keep up to three that are genuinely different: at most 25% slower than the fastest
+   and sharing at most 80% of their road with each other. I didn't pick these limits myself: I
+   took them from a study on alternative routes in road networks (Abraham et al., 2010; see
+   [How candidate routes are chosen](#how-candidate-routes-are-chosen)).
+2. **Checkpoints and ETAs.** Each route gets a checkpoint every 10 miles. ETAs come from the
+   router's driving times plus the federal hours-of-service stops (a 30-minute break after 8 hours
+   of driving, a 10-hour rest after 11).
+3. **Weather at each ETA.** Open-Meteo's hourly forecast at each checkpoint, for the hour the
+   truck reaches it.
+4. **Risk.** Each checkpoint is rated Low to No Travel by the brief's wind, rain and snow table and
+   its load rules (heavier cargo is riskier in strong wind).
+5. **Recommendation.** No Travel routes are ruled out, then the brief's order: fewest Severe miles,
+   fewest High miles, lowest average risk, fastest.
+
+```mermaid
+flowchart LR
+  UI["React + MapLibre<br/>trip form, map, route list"]
+  subgraph Django["Django (one process)"]
+    API["api/<br/>validate, serialize"]
+    SVC["services/<br/>run the stages, caches,<br/>weather budget"]
+    DOM["domain/<br/>routes, checkpoints, HOS,<br/>risk, recommendation<br/>(pure, no I/O)"]
+    PRV["providers/<br/>adapters"]
+  end
+  TT[("TomTom<br/>search + truck routing")]
+  OM[("Open-Meteo<br/>hourly forecast")]
+  UI -- "/api/geocode, /api/trips/plan,<br/>/api/trips/heatmap" --> API
+  API --> SVC
+  SVC --> DOM
+  SVC --> PRV
+  PRV --> TT
+  PRV --> OM
+```
+
+The backend is layered so the decisions can be tested without the network: `domain/` holds every
+rule as plain functions, `providers/` wrap the external APIs, `services/` run the stages in order
+(with caching), and `api/` only validates and serializes. The weather map is a separate request,
+so routes never wait for it.
+
+## Key decisions
+
+- **Weather for the hour the truck gets there, not "now".** A storm 200 miles out matters when the
+  truck reaches it, so every checkpoint uses its own ETA, rest stops included.
+  ([Checkpoints and ETAs](#checkpoints-and-etas))
+- **Risk rules exactly as the brief words them**, rounded once and then classified, so the number
+  shown is the number judged. One addition: gusts of 55 mph or more mean at least High. Missing
+  forecasts are shown as Unknown, never counted as Low. ([Risk at each checkpoint](#risk-at-each-checkpoint))
+- **Recommendation follows the brief's order, with a tie margin sized from data.** Average risk
+  counts as tied within one checkpoint's worth. In an 8-hour sweep of departures 15 minutes apart,
+  that margin cut the number of times the pick switched from 7 to 3, each at a real change in the
+  weather.
+  ([Choosing the recommended route](#choosing-the-recommended-route))
+- **A smooth weather map.** All 49 hours arrive in one small response; moving the slider only
+  repaints the map, with no network calls. ([Weather map](#weather-map-048-h))
+- **Free weather data, used carefully.** One shared budget keeps the app inside Open-Meteo's free
+  limits, forecasts are cached, and the deployed app has its own outbound IP so other apps can't
+  use up its allowance. ([Deployment](#deployment))
+- **Load weight means cargo weight.** An empty semi already weighs ~35,000 lb, so the brief's
+  30,000 / 40,000 lb rules only make sense for cargo. ([Assumptions](#assumptions))
+
+Known limitations are listed [at the end](#known-limitations).
 
 ## Project structure
 
@@ -123,12 +199,18 @@ itself. Behind a host's load balancer, `DJANGO_NUM_PROXIES` says how many proxie
 ## How candidate routes are chosen
 
 Routes come from the TomTom Routing API in truck mode (the "TomTom Maps" API family; the newer
-Orbis family has no truck mode). We do not build a routing engine. We pick which routes to compare:
+Orbis family has no truck mode). I don't build a routing engine; I pick which routes to compare.
+
+To decide what makes an alternative worth showing, I looked for research rather than inventing
+thresholds, and used the definition from Abraham, Delling, Goldberg & Werneck,
+[*Alternative Routes in Road Networks*](https://www.microsoft.com/en-us/research/wp-content/uploads/2010/01/alternativeSea2010.pdf) (SEA 2010). The authors call an alternative
+useful when it is not much longer than the best route (*bounded stretch*) and differs from it
+substantially (*limited sharing*), and they use 25% and 80% for those two limits. I use the same
+values. The steps:
 
 1. **Request.** Ask TomTom for the best truck route plus 3 alternatives, with the truck's weight,
    standard semi dimensions and departure time (so typical traffic for that hour is used).
-2. **Filter and pick** (rules from Abraham, Delling, Goldberg & Werneck, *Alternative Routes in
-   Road Networks*, SEA 2010, using the paper's values):
+2. **Filter and pick** (the study's rules and values):
    - Always keep the fastest route.
    - Drop any route more than **25% slower** than the fastest (*bounded stretch*).
    - Then repeatedly add the route that **shares the least road** with those already chosen,
@@ -141,8 +223,8 @@ Orbis family has no truck mode). We do not build a routing engine. We pick which
    show the ones that do and say so.
 
 Shared road is measured by sampling each route every 500 m and checking whether the sample lies on
-the other route (~1 km grid). The paper applies the 25% limit to every part of a detour; a routing
-API only returns whole routes, so it is applied to the whole trip. Requesting 3 alternatives rather
+the other route (~1 km grid). The study applies the 25% limit to every part of a detour; a routing
+API only returns whole routes, so I apply it to the whole trip. Requesting 3 alternatives rather
 than TomTom's maximum of 5 halves the response time and gave the same choices in testing.
 
 ## Checkpoints and ETAs
@@ -150,7 +232,7 @@ than TomTom's maximum of 5 halves the response time and gave the same choices in
 Weather is checked at **checkpoints every 10 miles** along each route, plus the start and the
 destination (a regular checkpoint within 2 miles of the destination is skipped).
 
-- **Why 10 miles:** the brief lists "every 10 / 25 / 50 miles". We read that as a choice of
+- **Why 10 miles:** the brief lists "every 10 / 25 / 50 miles". I read that as a choice of
   sampling density and chose 10 miles for every trip, for the most detailed weather picture:
   forecast models resolve weather at roughly 3–13 km, so 10 miles (16 km) is close to the finest
   detail available, while 25 or 50 miles can step over a single thunderstorm cell. Weather for all
@@ -224,7 +306,7 @@ Each checkpoint's forecast is classified with the brief's risk table and load ru
   No Travel; 35–44 mph with cargo over 40,000 lb is Severe. "Over" is strict: exactly 30,000 lb
   does not trigger the first rule.
 - **Gust safeguard (my addition):** gusts of 55 mph or more raise the wind level to at least High.
-  The brief's table says only "wind"; we classify sustained wind as the table describes, but it is
+  The brief's table says only "wind"; I classify sustained wind as the table describes, but it is
   gusts that push high-sided trucks over, so a dangerous gust is never reported as Low or Moderate.
   It raises to High rather than No Travel because a gust is a burst, not a constant force.
 - **The checkpoint's level is the worst of wind, rain and snow**, and the popup says what set it
