@@ -1,0 +1,34 @@
+# Fly.io deployment. Deploy with `fly deploy --ha=false` (see README "Deployment").
+
+app = "weather-aware-truck-routing"
+primary_region = "ord" # Chicago, central US
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DJANGO_ALLOWED_HOSTS = "weather-aware-truck-routing.fly.dev"
+  # Fly's proxy is the one hop in front of the app; rate limits use the address it saw.
+  DJANGO_NUM_PROXIES = "1"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Exactly one machine, always running: the weather budget and caches live in its memory.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/health/"
+    timeout = "5s"
+
+    [http_service.checks.headers]
+      Host = "weather-aware-truck-routing.fly.dev"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

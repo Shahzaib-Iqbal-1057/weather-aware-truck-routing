@@ -1,0 +1,16 @@
+# Only source goes into the image: no secrets, local environments or build output.
+.git
+**/.env
+**/.env.*
+**/__pycache__
+**/*.py[cod]
+backend/.venv
+backend/.pytest_cache
+backend/.ruff_cache
+backend/tests
+frontend/node_modules
+frontend/dist
+**/*.tsbuildinfo
+PIPELINE.md
+*.pdf
+.DS_Store

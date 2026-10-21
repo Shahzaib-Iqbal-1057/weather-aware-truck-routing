@@ -21,6 +21,9 @@ frontend/               Vite + React + TypeScript
     features/           trip-form, map, route-summary, heatmap
     components/         shared UI
     lib/                shared helpers (time zones, formatting, risk colours)
+
+Dockerfile              one image: builds the React app, runs Django under gunicorn
+fly.toml                Fly.io deployment
 ```
 
 ## Local development
@@ -57,6 +60,52 @@ App runs at http://localhost:5173. In dev, Vite forwards `/api` to Django, so no
 | Format | `.venv/bin/ruff format .` | `npm run format` |
 | Types | — | `npm run typecheck` |
 | Tests | `.venv/bin/pytest` | `npm test` |
+
+## Deployment
+
+The app is deployed on [Fly.io](https://fly.io) as **one service**: a single Docker image builds the
+React app and runs Django under gunicorn, and Django serves the built app as well as the API (via
+WhiteNoise: `index.html` at `/`, the hashed bundles under `/assets/` cached for a year). One
+origin means no CORS and one URL to share.
+
+Why it is set up this way:
+
+- **Exactly one process, always running.** The weather budget and the caches live in that
+  process's memory (see "Staying inside the free weather tier"), so gunicorn runs one worker
+  with 8 threads, and Fly keeps one machine up with no autoscaling and no sleeping
+  (`fly.toml`). A sleeping or second instance would reset or split the counts.
+- **Its own outbound IP.** Open-Meteo's free tier limits by IP address. On hosts where many apps
+  share outbound IPs, other people's weather requests would use up our allowance, so the app gets
+  a static egress IP of its own.
+- **Long requests are fine.** A long trip can take ~20 s of routing plus up to a minute waiting
+  for weather allowance, so the gunicorn timeout is 120 s.
+- **Secrets stay out of the repo.** `DJANGO_SECRET_KEY` and `TOMTOM_API_KEY` are Fly secrets. In
+  production (`DJANGO_PRODUCTION=true`, set by the image) the app refuses to start without a real
+  secret key. `DJANGO_NUM_PROXIES=1` makes rate limits use the client address Fly's proxy saw.
+
+To deploy your own copy (after `fly auth login`; change the app name in `fly.toml` first):
+
+```bash
+fly apps create <app-name>
+```
+
+```bash
+fly secrets set DJANGO_SECRET_KEY=<long random value> TOMTOM_API_KEY=<your key> --stage
+```
+
+```bash
+fly ips allocate-egress --region ord
+```
+
+```bash
+fly deploy --ha=false
+```
+
+`--ha=false` keeps it to one machine (Fly otherwise starts two). Fly skips giving the app a public
+address when it already has an egress IP, so if the site doesn't answer after the first deploy, add
+the free ones with `fly ips allocate-v4 --shared` and `fly ips allocate-v6`. To try the production image
+locally: `docker build -t truck-routing .` and run it with `DJANGO_SECRET_KEY`,
+`TOMTOM_API_KEY` and `DJANGO_ALLOWED_HOSTS=localhost` set, publishing port 8000.
 
 ## API
 

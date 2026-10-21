@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,9 +18,18 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
 
 
+# Set by the Docker image: the deployed app, behind Fly.io's HTTPS proxy.
+PRODUCTION = env_bool("DJANGO_PRODUCTION", default=False)
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-insecure-key")
+if PRODUCTION and SECRET_KEY in {"", "dev-only-insecure-key", "change-me"}:
+    raise ImproperlyConfigured("Set DJANGO_SECRET_KEY to a long random value in production.")
 DEBUG = env_bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+
+if PRODUCTION:
+    # The proxy terminates HTTPS and says so in this header; trust it only in production.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # The app stores nothing, so there are no models, no database and no auth.
 INSTALLED_APPS = [
@@ -30,6 +40,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves the built React app (see FRONTEND_DIST) before any URL routing.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
 
@@ -71,6 +83,21 @@ TIME_ZONE = "UTC"
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+# One deployable service: Django also serves the React build (index.html at "/", hashed bundles
+# under /assets/). Locally the Vite dev server does this instead, so it is unset there.
+FRONTEND_DIST = os.environ.get("FRONTEND_DIST")
+if FRONTEND_DIST:
+    WHITENOISE_ROOT = FRONTEND_DIST
+    WHITENOISE_INDEX_FILE = True
+
+
+def _is_hashed_bundle(path: str, url: str) -> bool:
+    """Vite puts a content hash in every file name under /assets/, so they can be cached forever."""
+    return url.startswith("/assets/")
+
+
+WHITENOISE_IMMUTABLE_FILE_TEST = _is_hashed_bundle
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # External provider keys.
