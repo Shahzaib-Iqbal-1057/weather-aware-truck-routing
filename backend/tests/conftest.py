@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 import pytest
-from django.core.cache import cache
+from django.core.cache import caches
 
 from trips.domain.weather import HourlyWeather
 from trips.services import weather as weather_service
@@ -9,9 +9,11 @@ from trips.services import weather as weather_service
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    cache.clear()
+    for store in caches.all():
+        store.clear()
     yield
-    cache.clear()
+    for store in caches.all():
+        store.clear()
 
 
 class FakeWeather:

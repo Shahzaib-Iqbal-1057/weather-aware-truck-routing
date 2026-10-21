@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import caches
 from django.utils import timezone
 
 from trips.domain.candidates import MAX_ROUTES, detour_boxes, select_routes, shortfall_reason
@@ -135,7 +135,8 @@ def trip_routes(trip: TripRequest, *, router: RoutingProvider | None = None) -> 
 def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> tuple[list[Route], str | None]:
     """The chosen routes, and why there are fewer than MAX_ROUTES (None if there are not)."""
     cache_key = _route_cache_key(trip)
-    cached = cache.get(cache_key)
+    route_cache = caches["routes"]
+    cached = route_cache.get(cache_key)
     if cached is not None:
         return cached
 
@@ -182,7 +183,7 @@ def _candidate_routes(trip: TripRequest, router: RoutingProvider) -> tuple[list[
     result = (selected, shortfall)
     # A transient failure should not pin a short list of routes in the cache.
     if not fallback_failed:
-        cache.set(cache_key, result, ROUTE_CACHE_SECONDS)
+        route_cache.set(cache_key, result, ROUTE_CACHE_SECONDS)
     return result
 
 

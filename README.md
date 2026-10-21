@@ -243,7 +243,8 @@ and when the weather is practically the same, the fastest route wins.
 ## Reading the map
 
 - **Routes:** the selected route is blue and the alternatives gray, each with a label showing its
-  door-to-door time. Click a line, its label or its card to select it.
+  door-to-door time. Click a line, its label or its card to select it. Lines and the weather map
+  are drawn under the base map's place names, so a route never hides a town's name.
 - **Risk on every route, not just the selected one.** Road at Moderate or worse is drawn in the
   risk colours *inside* the route's own line, so a stormy stretch on an alternative is visible
   without selecting it, and the blue or gray edge still says which route it belongs to. Each
@@ -289,9 +290,13 @@ sits in a colored area, that is when the truck drives through it. The map also s
   repaints the map: no request, no data re-sent, and no re-tiling. The sidebar doesn't re-render
   on slider steps, and the truck marker is moved rather than rebuilt.
 - **Loaded on demand** ("Show weather map", and "Hide" to turn it off again): it costs one weather
-  location per cell, so trips where nobody opens it cost half as much.
-- **Still works after a while:** the map can be opened long after planning, even once a "leave
-  now" departure has passed; it uses the same cached routes as the plan.
+  location per cell, so trips where nobody opens it cost half as much. Planning a new trip turns
+  it off again.
+- **Still works after a while:** the map can be opened well after planning, even once a "leave
+  now" departure has passed. It uses the plan's cached routes for up to an hour (less on a busy
+  server); after that the routes are fetched again, for the departure time or for now if it has
+  passed, so the corridor may differ slightly from the drawn routes. More than 24 hours after the
+  departure, the trip has to be planned again.
 
 **Staying inside the free weather tier.** Open-Meteo's free tier allows 600 locations per minute,
 5,000 per hour and 10,000 per day, and every location in a batched request counts. All weather
@@ -305,8 +310,9 @@ a single process. Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC 
 
 ## Assumptions
 
-- Region: United States only (lower 48, Alaska and Hawaii). Autocomplete only offers US places,
-  and the API rejects others.
+- Region: United States only (lower 48, Alaska and Hawaii). Autocomplete only offers US places.
+  The API also checks coordinates against rough boxes around those three areas, which keeps out
+  places like Paris but lets through border areas such as Toronto or Monterrey.
 - **"Load weight" is the cargo (freight) weight**, 0–45,000 lb. An empty tractor with a 53 ft
   trailer already weighs about 35,000 lb, so if the input meant the whole truck, every semi would
   be over the brief's 30,000 lb threshold and the load rules would no longer distinguish light

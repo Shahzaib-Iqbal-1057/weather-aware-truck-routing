@@ -57,16 +57,12 @@
   }
 }
 
-/* Phones: clear of the zoom buttons, and a hint shrinks to its title. */
+/* Phones: clear of the zoom buttons. */
 @media (max-width: 760px) {
   .map-message {
     top: 10px;
     left: 10px;
     max-width: calc(100% - 64px);
     transform: none;
-  }
-
-  .map-message--hint .map-message__text {
-    display: none;
   }
 }

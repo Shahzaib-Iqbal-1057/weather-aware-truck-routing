@@ -212,6 +212,22 @@ def test_the_reason_survives_the_route_cache():
     assert "more than 25% slower" in plan.notes[0]
 
 
+def test_routes_are_cached_apart_from_the_weather_cache(settings):
+    from django.core.cache import caches
+
+    trip = make_trip()
+    plan_trip(trip, router=FakeRouter([DIRECT], [], []))
+    caches["default"].clear()  # weather (and anything else on the default cache) is gone
+
+    router = FakeRouter()
+    plan = plan_trip(trip, router=router)
+
+    assert router.calls == []  # the routes still came from their own store
+    assert len(plan.routes) == 1
+    # A small cap: a long trip's routes are ~2 MB with full geometry.
+    assert settings.CACHES["routes"]["OPTIONS"]["MAX_ENTRIES"] == 50
+
+
 def test_the_plan_includes_totals_and_a_recommendation():
     plan = plan_trip(make_trip(), router=FakeRouter([DIRECT, NORTH, SOUTH]))
 

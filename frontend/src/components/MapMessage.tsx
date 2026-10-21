@@ -5,18 +5,13 @@ interface MapMessageProps {
   title?: string
   /** Shows a spinner; the message is read out as a status update. */
   busy?: boolean
-  /** A first-use hint: on phones only the title is shown, so the small map stays visible. */
-  hint?: boolean
   children: ReactNode
 }
 
-/** A small card over the map: what to do first, progress, or what went wrong. */
-export function MapMessage({ title, busy = false, hint = false, children }: MapMessageProps) {
-  const className = ['map-message', busy && 'map-message--busy', hint && 'map-message--hint']
-    .filter(Boolean)
-    .join(' ')
+/** A small card over the map: progress, or what went wrong. */
+export function MapMessage({ title, busy = false, children }: MapMessageProps) {
   return (
-    <div className={className} role="status">
+    <div className={`map-message${busy ? ' map-message--busy' : ''}`} role="status">
       {busy && <span className="map-message__spinner" aria-hidden="true" />}
       <div>
         {title && <p className="map-message__title">{title}</p>}

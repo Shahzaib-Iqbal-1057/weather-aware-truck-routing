@@ -278,28 +278,36 @@ function heatmapRadius(heatmap: HeatmapResponse | undefined): ExpressionSpecific
 }
 
 function addRouteLayers(map: MapLibreMap) {
+  // Lines and the weather map go under the base map's labels, so a route never hides a town's
+  // name (the labels have a white halo, so they stay readable on top of a line). Points (dots,
+  // stops, start and end) stay on top of everything.
+  const underLabels = map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id
+
   // The weather map goes underneath everything route-related.
-  // A disc can be wider than a map tile when zoomed in, and MapLibre clips each tile's drawing at
-  // its edge. Tiling the cells at a low zoom with the widest buffer keeps every disc whole: tiles
-  // are then scaled up when zooming in, so the buffer grows with the discs.
+  // MapLibre draws each disc only from the tile that holds its centre. Zoomed in, a disc is wider
+  // than a tile, and if its centre's tile isn't loaded the visible part is cut off along a tile
+  // edge. Tiling the cells at a low zoom makes each tile hundreds of km across (scaled up when
+  // zooming in), so the centre's tile is loaded whenever any part of its disc is on screen.
   map.addSource(HEATMAP_SOURCE, {
     type: 'geojson',
     data: heatmapFeatures(undefined),
     maxzoom: HEATMAP_TILE_ZOOM,
-    buffer: 512,
   })
-  map.addLayer({
-    id: HEATMAP_LAYER,
-    type: 'circle',
-    source: HEATMAP_SOURCE,
-    paint: {
-      'circle-color': HEATMAP_COLOR,
-      'circle-radius': heatmapRadius(undefined),
-      'circle-blur': HEATMAP_BLUR,
-      'circle-opacity': HEATMAP_OPACITY,
-      'circle-pitch-alignment': 'map',
+  map.addLayer(
+    {
+      id: HEATMAP_LAYER,
+      type: 'circle',
+      source: HEATMAP_SOURCE,
+      paint: {
+        'circle-color': HEATMAP_COLOR,
+        'circle-radius': heatmapRadius(undefined),
+        'circle-blur': HEATMAP_BLUR,
+        'circle-opacity': HEATMAP_OPACITY,
+        'circle-pitch-alignment': 'map',
+      },
     },
-  })
+    underLabels,
+  )
   map.addSource(ROUTES_SOURCE, { type: 'geojson', data: routeFeatures([], null) })
   map.addSource(RISK_STRETCHES_SOURCE, { type: 'geojson', data: riskStretchFeatures([], null) })
   map.addSource(ENDPOINTS_SOURCE, { type: 'geojson', data: endpointFeatures(null, null) })
@@ -312,31 +320,40 @@ function addRouteLayers(map: MapLibreMap) {
     // risky stretch and says which route it belongs to.
     const [casingWidth, lineWidth, riskWidth] = widths
     const filter: ExpressionSpecification = ['==', ['get', 'selected'], selected]
-    map.addLayer({
-      id: `route-casing-${key}`,
-      type: 'line',
-      source: ROUTES_SOURCE,
-      filter,
-      layout: lineLayout,
-      paint: { 'line-color': ROUTE_CASING_COLOR, 'line-width': casingWidth },
-    })
-    map.addLayer({
-      id: `route-line-${key}`,
-      type: 'line',
-      source: ROUTES_SOURCE,
-      filter,
-      layout: lineLayout,
-      paint: { 'line-color': color, 'line-width': lineWidth },
-    })
-    map.addLayer({
-      id: `route-risk-${key}`,
-      type: 'line',
-      source: RISK_STRETCHES_SOURCE,
-      filter,
-      // Worse weather above milder where stretches overlap.
-      layout: { ...lineLayout, 'line-sort-key': WORSE_FIRST },
-      paint: { 'line-color': RISK_COLOR_BY_LEVEL, 'line-width': riskWidth },
-    })
+    map.addLayer(
+      {
+        id: `route-casing-${key}`,
+        type: 'line',
+        source: ROUTES_SOURCE,
+        filter,
+        layout: lineLayout,
+        paint: { 'line-color': ROUTE_CASING_COLOR, 'line-width': casingWidth },
+      },
+      underLabels,
+    )
+    map.addLayer(
+      {
+        id: `route-line-${key}`,
+        type: 'line',
+        source: ROUTES_SOURCE,
+        filter,
+        layout: lineLayout,
+        paint: { 'line-color': color, 'line-width': lineWidth },
+      },
+      underLabels,
+    )
+    map.addLayer(
+      {
+        id: `route-risk-${key}`,
+        type: 'line',
+        source: RISK_STRETCHES_SOURCE,
+        filter,
+        // Worse weather above milder where stretches overlap.
+        layout: { ...lineLayout, 'line-sort-key': WORSE_FIRST },
+        paint: { 'line-color': RISK_COLOR_BY_LEVEL, 'line-width': riskWidth },
+      },
+      underLabels,
+    )
   }
   const checkpointPaint = {
     'circle-radius': 4.5,

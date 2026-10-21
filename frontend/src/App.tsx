@@ -4,7 +4,6 @@ import { useHeatmap, weatherAllowanceUsedUp } from './api/heatmap'
 import { usePlanTrip } from './api/trips'
 import type { RouteId, TripPlanRequest } from './api/types'
 import { browserTimeZone } from './lib/zonedTime'
-import { BackendStatus } from './components/BackendStatus'
 import { MapErrorBoundary } from './components/MapErrorBoundary'
 import { MapMessage } from './components/MapMessage'
 import { HeatmapControl } from './features/heatmap/HeatmapControl'
@@ -25,7 +24,6 @@ const RouteMap = lazy(() =>
 // Moving the weather map's slider re-renders App every hour step. The sidebar doesn't depend on
 // the hour, so it skips those renders (its props are stable between them).
 const Sidebar = {
-  BackendStatus: memo(BackendStatus),
   TripSummary: memo(TripSummary),
   TripForm: memo(TripForm),
   RouteList: memo(RouteList),
@@ -68,6 +66,8 @@ export default function App() {
     (request: TripPlanRequest) => {
       setSelectedId(null)
       setHeatmapHour(0)
+      // A new trip's weather map costs a weather location per cell, so it waits to be asked for.
+      setHeatmapOn(false)
       mutate(request, { onSuccess: () => setEditing(false) })
     },
     [mutate],
@@ -105,12 +105,12 @@ export default function App() {
 
   return (
     <div className={plan ? 'app app--planned' : 'app'}>
-      <header className="app__header">
-        <h1>Weather-Aware Truck Routing</h1>
-        <Sidebar.BackendStatus />
-      </header>
       <div className="app__body">
         <aside className="app__sidebar" aria-label="Trip planner">
+          <header className="app__brand">
+            <h1>Weather-Aware Truck Routing</h1>
+            <p>Truck routes compared by the weather along the way, for the hour you get there.</p>
+          </header>
           {plan && (
             <Sidebar.TripSummary
               plan={plan}
@@ -166,16 +166,8 @@ export default function App() {
           </MapErrorBoundary>
           {planTrip.isPending ? (
             <MapMessage busy>Finding truck routes and checking the weather…</MapMessage>
-          ) : general ? (
-            <MapMessage title="Could not plan this trip">{general}</MapMessage>
           ) : (
-            !plan && (
-              <MapMessage title="Plan a trip to see truck routes" hint>
-                Pick a start, a destination, when you leave and the cargo weight. Up to three
-                truck-legal routes appear here, coloured by the weather forecast for the hour the
-                truck reaches each stretch.
-              </MapMessage>
-            )
+            general && <MapMessage title="Could not plan this trip">{general}</MapMessage>
           )}
           {plan && (
             <HeatmapControl

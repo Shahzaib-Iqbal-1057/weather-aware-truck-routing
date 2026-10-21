@@ -44,6 +44,13 @@ CACHES = {
         # Django's default of 300 entries is too small: a long trip caches ~250 weather grid points.
         "OPTIONS": {"MAX_ENTRIES": 20_000},
     },
+    # Candidate routes keep their full geometry (a long trip's three routes are ~2 MB), so they get
+    # their own store with a small cap: memory stays bounded however many trips are planned.
+    "routes": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "routes",
+        "OPTIONS": {"MAX_ENTRIES": 50},
+    },
 }
 
 REST_FRAMEWORK = {
